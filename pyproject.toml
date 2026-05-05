@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semantic-research-graph"
+version = "0.1.0"
+description = "Semantic Research Graph core pipeline and services"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.32.0",
+  "streamlit>=1.44.0",
+  "streamlit-agraph>=0.0.45",
+  "pypdf>=4.2.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

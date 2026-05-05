@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Local databases and runtime artifacts
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated reports / exports
+srg_research_report*.md
+*.bib
+
+# Streamlit / project runtime folders
+srg_projects/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
