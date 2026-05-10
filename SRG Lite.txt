@@ -1,0 +1,1755 @@
+# SRG Lite — Product Design Document
+
+## Overview
+
+SRG Lite is a simplified research-orientation tool designed for PhD students and researchers entering unfamiliar fields.
+
+The goal is NOT to be a full bibliography manager, graph analytics platform, or research operating system.
+
+The goal is to help users answer one question clearly:
+
+> “Where should I start in this research area?”
+
+SRG Lite uses the existing backend pipeline and graph infrastructure but intentionally exposes only a minimal, guided experience.
+
+The backend is considered frozen for this phase.
+Do NOT redesign or significantly refactor backend ingestion, clustering, embedding, graph, ranking, or persistence systems unless absolutely necessary for frontend integration.
+
+This phase is focused on:
+
+* frontend simplification,
+* workflow clarity,
+* reducing cognitive overload,
+* guided exploration.
+
+---
+
+# Core Product Philosophy
+
+The product should feel:
+
+* calm,
+* guided,
+* readable,
+* opinionated,
+* lightweight.
+
+The interface should prioritize:
+
+* understanding,
+* orientation,
+* reading decisions,
+  not graph complexity or technical controls.
+
+Users should never feel like they are operating a graph database or research pipeline.
+
+---
+
+# Core User
+
+Primary user:
+
+* PhD student entering a new research field.
+
+Secondary users:
+
+* engineers exploring unfamiliar topics,
+* researchers starting literature reviews.
+
+---
+
+# Primary User Question
+
+> “Where should I start?”
+
+Everything in the UI should support this question.
+
+---
+
+# Core Workflow
+
+1. User enters:
+
+   * topic,
+   * DOI,
+   * arXiv link,
+   * or paper title.
+
+2. Backend retrieves and processes papers using existing pipeline.
+
+3. Frontend presents:
+
+   * major research branches,
+   * foundational papers,
+   * influential recent works,
+   * conceptual relationships,
+   * suggested reading flow.
+
+4. User explores papers visually.
+
+5. User exports a reading list or markdown report.
+
+---
+
+# MVP Scope
+
+The frontend should ONLY expose the following functionality.
+
+## KEEP — Core Features
+
+### Discovery Input
+
+* Single search/input bar.
+* Accept:
+
+  * text query,
+  * DOI,
+  * arXiv URL/id,
+  * paper title.
+
+### Research Map
+
+* Interactive but simplified graph view.
+* Nodes represent papers.
+* Colors/grouping represent major branches/topics.
+* Visual hierarchy should emphasize:
+
+  * foundational papers,
+  * influential papers,
+  * branch structure.
+
+### Branch View
+
+For each cluster/topic branch show:
+
+* branch label,
+* short description if available,
+* foundational papers,
+* important recent papers.
+
+### Paper Details
+
+When selecting a paper:
+
+* title,
+* authors,
+* year,
+* abstract,
+* DOI/arXiv links,
+* why it matters,
+* citation count if available.
+
+### Guided Reading
+
+Show:
+
+* “Start Here” papers,
+* “Foundational” papers,
+* “Recent Important” papers.
+
+The product should help users decide:
+
+* what to read first,
+* what matters most.
+
+### Export
+
+Allow:
+
+* markdown reading list export,
+* BibTeX export.
+
+---
+
+# REMOVE / HIDE FROM UI
+
+The following existing backend capabilities should NOT be exposed in the SRG Lite UI.
+
+## Advanced Graph Controls
+
+Hide:
+
+* graph relation tuning,
+* edge weighting controls,
+* clustering parameter tuning,
+* HDBSCAN/KMeans selection,
+* graph expansion modes,
+* citation mode selection.
+
+Use sensible defaults internally.
+
+---
+
+## Diagnostics / Pipeline Complexity
+
+Hide:
+
+* pipeline diagnostics,
+* provenance inspectors,
+* ingestion stats,
+* clustering metrics,
+* noise ratios,
+* coverage diagnostics,
+* API internals,
+* retry/backoff visibility.
+
+These are internal engineering concerns.
+
+---
+
+## Advanced Research Analytics
+
+Do NOT expose:
+
+* bibliographic coupling controls,
+* co-citation metrics UI,
+* synthetic edge controls,
+* relation threshold sliders,
+* advanced recommendation tuning.
+
+---
+
+## Library Management
+
+Exclude:
+
+* PDF library management,
+* local graph persistence UX,
+* project workspaces,
+* save/load/delete systems,
+* personal document organization.
+
+This is outside SRG Lite scope.
+
+---
+
+# UX Philosophy
+
+The interface should:
+
+* minimize visible controls,
+* minimize configuration,
+* minimize technical language.
+
+The user should feel:
+
+* guided,
+* oriented,
+* informed.
+
+NOT:
+
+* overwhelmed,
+* analytical,
+* forced to configure systems.
+
+---
+
+# UI Structure
+
+## Main Layout
+
+### Top
+
+* Search bar.
+* Minimal controls.
+
+### Left Sidebar
+
+* Branch list / topic clusters.
+* Foundational papers.
+* Suggested reading flow.
+
+### Center
+
+* Interactive graph.
+
+### Right Sidebar
+
+* Selected paper details.
+
+---
+
+# Visual Design Guidelines
+
+The UI should feel:
+
+* modern,
+* clean,
+* research-oriented,
+* minimal.
+
+Avoid:
+
+* dense dashboards,
+* engineering-style admin panels,
+* excessive metrics,
+* cluttered graph controls.
+
+Prefer:
+
+* whitespace,
+* readable typography,
+* progressive disclosure,
+* simple interactions.
+
+---
+
+# Technical Constraints
+
+IMPORTANT:
+
+* Reuse existing backend APIs and processing pipeline whenever possible.
+* Avoid major backend rewrites.
+* Do not redesign ingestion architecture.
+* Do not introduce new complex infrastructure.
+* Frontend should act as a curated presentation layer over the existing system.
+
+---
+
+# Engineering Goal
+
+This phase is NOT about maximizing capability.
+
+This phase is about:
+
+* simplifying exposure,
+* improving usability,
+* validating the core product thesis,
+* making research orientation intuitive.
+
+The frontend should prioritize clarity over feature completeness.
+
+# SRG Lite — Retrieval Quality & Field-Aware Discovery Phase
+
+## Objective
+
+Improve research relevance quality by shifting retrieval and graph construction away from generic semantic similarity and toward field-aware research relationships.
+
+The current system over-relies on embedding similarity, causing topic drift into semantically related but research-irrelevant literature.
+
+Example:
+
+* Query: "Directed Preference Optimization"
+* Incorrect retrievals:
+
+  * generic optimization,
+  * Bayesian optimization,
+  * convex optimization,
+  * support vector optimization.
+
+The system should instead prioritize:
+
+* citation neighborhoods,
+* research communities,
+* canonical papers,
+* field-specific terminology,
+* co-citation structure,
+* recent field lineage.
+
+---
+
+# New Retrieval Philosophy
+
+The system should model:
+
+* research conversations,
+  not generic semantic similarity.
+
+Papers are considered strongly related when they:
+
+* cite similar canonical works,
+* are co-cited together,
+* belong to the same citation neighborhood,
+* emerge from the same research community,
+* use field-specific terminology,
+* appear in the same conference/journal ecosystem,
+* participate in the same historical lineage.
+
+Semantic embeddings should become a secondary refinement signal, not the primary retrieval mechanism.
+
+---
+
+# Retrieval Pipeline (New Direction)
+
+## OLD PIPELINE
+
+Query
+→ embedding similarity
+→ semantic expansion
+→ clustering
+
+This caused semantic drift.
+
+---
+
+## NEW PIPELINE
+
+Query
+→ identify anchor papers
+→ build citation neighborhood
+→ expand through co-citation/bibliographic coupling
+→ detect research communities
+→ optionally refine with embeddings
+→ generate simplified topic map
+
+---
+
+# Phase 1 — Anchor Paper Identification
+
+Goal:
+Find highly field-relevant seed papers before broader expansion.
+
+Possible approaches:
+
+* exact title/alias matching,
+* acronym detection,
+* OpenAlex search ranking,
+* Semantic Scholar ranking,
+* query-to-paper reranking,
+* citation count priors for canonical works.
+
+Examples:
+
+* "DPO" → Direct Preference Optimization paper
+* "RLHF" → foundational RLHF papers
+* "transformers" → Attention Is All You Need
+
+The retrieval pipeline should strongly anchor around these papers.
+
+---
+
+# Phase 2 — Citation Neighborhood Expansion
+
+Instead of broad semantic nearest-neighbor expansion:
+
+Prefer:
+
+* references of anchor papers,
+* citing papers,
+* co-cited papers,
+* bibliographic coupling.
+
+Expansion should prioritize:
+
+* direct citation structure,
+* repeated co-occurrence in literature.
+
+This models actual research communities better than embeddings alone.
+
+---
+
+# Phase 3 — Community Detection
+
+Clusters should emerge primarily from:
+
+* citation topology,
+* co-citation structure,
+* bibliographic coupling,
+  not abstract semantic similarity alone.
+
+Embedding similarity may be used:
+
+* inside already-established field neighborhoods,
+* for local refinement only.
+
+---
+
+# Phase 4 — Drift Reduction
+
+The system should actively penalize:
+
+* semantically broad terms,
+* generic optimization literature,
+* unrelated mathematical subfields,
+* weakly connected semantic neighbors.
+
+Introduce:
+
+* field coherence scoring,
+* citation-connectedness thresholds,
+* anchor-distance penalties.
+
+---
+
+# Field Coherence Concept
+
+A paper should not appear highly ranked merely because:
+
+* its abstract contains similar words.
+
+A paper should rank highly when:
+
+* it belongs to the same research conversation.
+
+Signals:
+
+* shared citations,
+* common benchmark papers,
+* same conference ecosystems,
+* repeated co-citation patterns,
+* temporal lineage continuity.
+
+---
+
+# Ranking Priorities
+
+Prioritize:
+
+1. Citation-connectedness to anchors.
+2. Co-citation strength.
+3. Bibliographic coupling.
+4. Canonical field relevance.
+5. Recent influential descendants.
+6. Semantic similarity (secondary only).
+
+---
+
+# UI Implications
+
+The UI should communicate:
+
+* field branches,
+* lineage,
+* foundational works,
+* influential descendants,
+  not generic semantic similarity.
+
+Topic branches should represent:
+
+* actual research directions,
+  not embedding neighborhoods.
+
+---
+
+# Important Constraints
+
+DO NOT:
+
+* rewrite the entire backend,
+* remove existing graph infrastructure,
+* remove embeddings entirely.
+
+Instead:
+
+* rebalance retrieval weighting,
+* reduce semantic dominance,
+* prioritize citation/community structure.
+
+---
+
+# Engineering Goal
+
+The system should increasingly answer:
+
+> "What papers belong to this research field?"
+
+instead of:
+
+> "What papers are semantically similar?"
+
+This phase focuses on:
+
+* retrieval quality,
+* field coherence,
+* researcher trust,
+* reduction of semantic drift.
+
+
+SRG Lite — Retrieval Repair & Citation Expansion Phase
+Objective
+
+Repair the current retrieval pipeline so SRG Lite can construct meaningful research-field neighborhoods instead of isolated semantic matches.
+
+The current system frequently returns:
+
+a single anchor paper,
+disconnected nodes,
+zero citation edges,
+weak or missing reference enrichment,
+semantically related but field-irrelevant papers.
+
+This prevents SRG Lite from producing:
+
+research branches,
+foundational papers,
+lineage maps,
+guided reading flows,
+trustworthy field orientation.
+
+This phase focuses on transforming the system from:
+
+“semantic paper similarity”
+
+into:
+
+“research field neighborhood reconstruction.”
+
+Problem Diagnosis
+
+Current failure example:
+
+Query:
+
+"Directed Preference Optimization"
+
+Observed behavior:
+
+only one paper retrieved,
+no references attached,
+no citation edges,
+no community structure,
+no field expansion.
+
+This indicates the retrieval system is currently behaving like:
+
+query
+→ semantic match
+→ single paper
+→ stop
+
+instead of:
+
+query
+→ identify field anchors
+→ expand citation neighborhood
+→ construct research graph
+→ detect communities
+→ rank field structure
+Root Causes
+Weak Anchor Resolution
+
+The system often identifies only a single matching paper instead of multiple canonical field anchors.
+
+This causes unstable and incomplete retrieval.
+
+Missing Citation Enrichment
+
+Many retrieved papers lack:
+
+references,
+cited-by metadata,
+citation edges,
+bibliographic connections.
+
+Without citation enrichment:
+
+co-citation cannot be computed,
+bibliographic coupling cannot emerge,
+research communities cannot form,
+lineage detection fails.
+Embedding-Dominated Expansion
+
+The current pipeline over-relies on semantic embeddings.
+
+This causes drift toward:
+
+generic optimization literature,
+mathematically related topics,
+semantically similar but field-irrelevant papers.
+
+Research fields are structured primarily through:
+
+citation behavior,
+shared canonical works,
+conference ecosystems,
+historical lineage,
+benchmark communities.
+
+Embeddings alone do not model this reliably.
+
+Engineering Goal
+
+The retrieval system should increasingly answer:
+
+“What papers belong to this research conversation?”
+
+instead of:
+
+“What papers use similar language?”
+
+Retrieval Repair Strategy
+Phase 1 — Robust Anchor Resolution
+Goal
+
+Resolve user queries into multiple canonical field anchors instead of a single semantic match.
+
+Requirements
+
+For each query:
+
+retrieve top-N candidate anchor papers,
+prioritize canonical works,
+support acronyms and aliases,
+support title normalization.
+Example
+"DPO"
+→
+- Direct Preference Optimization
+- RLHF-related foundational papers
+- Preference optimization follow-up works
+Suggested Signals
+
+Use:
+
+OpenAlex ranking,
+Semantic Scholar ranking,
+BM25/title matching,
+acronym expansion,
+citation count priors,
+alias dictionaries,
+query reranking.
+Important Constraint
+
+Do NOT use only one anchor paper.
+
+Target:
+
+3–20 anchor candidates
+
+depending on query confidence.
+
+Phase 2 — Citation Neighborhood Expansion
+Goal
+
+Construct a connected field graph around anchor papers.
+
+Expansion Sources
+
+For every anchor paper retrieve:
+
+references,
+cited-by papers,
+co-cited papers,
+bibliographic coupling neighbors,
+related OpenAlex works if available.
+Expansion Philosophy
+
+Prefer:
+
+citation-connected papers,
+repeatedly co-occurring papers,
+shared foundational literature.
+
+Avoid broad semantic nearest-neighbor expansion.
+
+Phase 3 — Reference Enrichment Repair
+Goal
+
+Ensure retrieved papers contain usable citation metadata.
+
+Required Metadata
+
+Every paper node should attempt to store:
+
+DOI,
+OpenAlex ID,
+arXiv ID,
+references,
+cited_by count,
+publication venue,
+year,
+authors.
+Fallback Strategy
+
+If one provider lacks references:
+
+attempt enrichment from another source.
+
+Example:
+
+OpenAlex
+→ Semantic Scholar
+→ Crossref
+Important Constraint
+
+A graph with isolated nodes should be considered low-quality retrieval.
+
+The system should actively detect and warn about:
+
+low edge count,
+missing references,
+disconnected expansion.
+Phase 4 — Field Coherence Scoring
+Goal
+
+Reduce semantic drift into unrelated fields.
+
+The System Should Penalize
+generic mathematical literature,
+weakly connected semantic neighbors,
+papers outside the citation community,
+broad optimization terminology without field lineage.
+Introduce Field Coherence Signals
+
+Candidate signals:
+
+citation overlap,
+co-citation frequency,
+bibliographic coupling,
+venue overlap,
+benchmark overlap,
+shared foundational citations,
+temporal lineage continuity,
+author-community overlap.
+Key Principle
+
+A paper should rank highly because:
+
+it belongs to the same research conversation,
+
+NOT merely because:
+
+it contains similar words.
+
+Phase 5 — Research Distance Model
+Goal
+
+Replace pure semantic similarity with research-community proximity.
+
+Concept
+
+Introduce a composite score such as:
+
+research_distance =
+citation_connectedness +
+co_citation_strength +
+bibliographic_coupling +
+venue_similarity +
+field_term_overlap +
+semantic_similarity_secondary
+Important Constraint
+
+Semantic similarity should become:
+
+a secondary refinement signal,
+not
+the primary retrieval driver.
+Phase 6 — Community Detection Rebalancing
+Goal
+
+Ensure topic branches emerge from actual research structure.
+
+Clustering Should Prioritize
+citation topology,
+co-citation structure,
+bibliographic coupling.
+Embeddings May Be Used
+
+Only:
+
+inside already-established field neighborhoods,
+for local refinement,
+for branch labeling assistance.
+Phase 7 — Retrieval Explainability
+Goal
+
+Improve researcher trust.
+
+For every recommended paper, expose lightweight explanations such as:
+
+“Frequently co-cited with DPO literature”
+“Strong citation overlap with RLHF papers”
+“Appears in the same research lineage”
+“Foundational paper referenced by many descendants”
+
+The system should communicate:
+
+why papers appear,
+how they connect,
+why they matter.
+Quality Expectations
+
+The system does NOT need perfect clustering.
+
+The system DOES need:
+
+connected graphs,
+canonical papers,
+coherent field neighborhoods,
+trustworthy reading recommendations.
+
+Researchers tolerate imperfect structure.
+
+Researchers do NOT tolerate:
+
+irrelevant papers,
+disconnected graphs,
+missing foundational works.
+Success Criteria
+
+A successful retrieval should produce:
+
+multiple anchor papers,
+dense citation neighborhoods,
+meaningful topic branches,
+foundational works,
+influential descendants,
+connected research structure,
+reduced semantic drift.
+Example Expected Behavior
+
+Query:
+
+"Directed Preference Optimization"
+
+Expected retrieval neighborhood should naturally include:
+
+DPO,
+RLHF,
+PPO,
+InstructGPT,
+Constitutional AI,
+RRHF,
+IPO,
+ORPO,
+preference learning papers,
+reward modeling papers,
+alignment literature.
+
+The system should NOT prioritize:
+
+convex optimization,
+Bayesian optimization,
+unrelated optimization theory.
+Important Constraints
+
+DO NOT:
+
+rewrite the entire backend,
+remove existing embeddings,
+discard current graph infrastructure,
+introduce heavy distributed infrastructure.
+
+Instead:
+
+rebalance retrieval weighting,
+improve metadata enrichment,
+strengthen citation expansion,
+prioritize field coherence,
+reduce semantic dominance.
+Final Engineering Goal
+
+SRG Lite should increasingly behave like:
+
+a research-field orientation system
+
+rather than:
+
+a semantic document search engine.
+
+SRG Lite — Field Coherence & Canonicality Stabilization Phase
+Objective
+
+Now that SRG Lite successfully retrieves larger citation neighborhoods and constructs connected research graphs, the next challenge is:
+
+reducing over-expansion,
+suppressing field drift,
+stabilizing canonical papers,
+improving field coherence,
+filtering noisy graph connections.
+
+The system currently retrieves significantly richer literature neighborhoods, but broad citation expansion can still introduce:
+
+peripheral papers,
+weakly related subfields,
+generic optimization literature,
+noisy semantic bridges,
+multimodal drift,
+low-confidence graph edges.
+
+This phase focuses on transforming the system from:
+
+“large connected research graph”
+
+into:
+
+“coherent and trustworthy field map.”
+
+Current Problem
+
+The retrieval system now successfully produces:
+
+multi-anchor expansion,
+citation neighborhoods,
+connected graph structure,
+topic branches,
+field lineage signals.
+
+However, several new issues emerge:
+
+Over-Expansion
+
+Broad citation expansion can pull in:
+
+weakly connected papers,
+adjacent but non-central subfields,
+generic optimization literature,
+unrelated multimodal branches.
+
+Example:
+
+Query:
+
+"Directed Preference Optimization"
+
+Incorrect high-ranking retrievals may include:
+
+generic RL literature,
+summarization papers,
+broad multimodal alignment work,
+unrelated optimization theory.
+Key Insight
+
+The system has transitioned from:
+
+under-retrieval
+
+to:
+
+over-expansion and weak field coherence
+
+This is a healthier failure mode.
+
+The graph now exists.
+
+The remaining task is:
+
+ranking,
+pruning,
+stabilization,
+coherence enforcement.
+Engineering Goal
+
+The system should increasingly identify:
+
+core field papers,
+foundational lineage,
+canonical methods,
+central research conversations,
+
+while suppressing:
+
+peripheral noise,
+weak semantic bridges,
+citation contamination,
+graph overreach.
+Phase 1 — Canonicality Stabilization
+Goal
+
+Ensure foundational field papers remain central in ranking and graph structure.
+
+Current Issue
+
+Highly connected recent papers can overpower foundational papers because graph degree and recency are weighted too aggressively.
+
+Example:
+
+A recent multimodal preference optimization paper may outrank the original DPO paper despite being derivative.
+
+Introduce Canonicality Scoring
+
+Add a dedicated canonicality score.
+
+Possible signals:
+
+citation count,
+cited-by count,
+anchor proximity,
+foundational lineage role,
+repeated co-citation with anchors,
+historical precedence,
+field-wide recurrence.
+Key Principle
+
+Foundational papers should behave like:
+
+gravitational centers of the field graph.
+
+Derivative papers should not dominate ranking merely due to:
+
+high degree,
+recency,
+broad citation activity.
+Phase 2 — Anchor Distance Penalty
+Goal
+
+Reduce uncontrolled graph drift during expansion.
+
+Problem
+
+Papers several hops away from anchor literature may enter the graph despite weak field relevance.
+
+Introduce Distance Decay
+
+Penalize papers based on graph distance from anchors.
+
+Example concepts:
+
+1-hop papers → strong relevance
+2-hop papers → moderate penalty
+3-hop papers → aggressive penalty
+Important Principle
+
+Field relevance should decay as citation distance increases.
+
+Phase 3 — Field Core vs Periphery Detection
+Goal
+
+Differentiate:
+
+core field papers,
+adjacent field papers,
+peripheral exploratory literature.
+Introduce Field-Core Scoring
+
+Possible signals:
+
+proximity to anchor papers,
+co-citation frequency with anchors,
+appearance across multiple anchor neighborhoods,
+title terminology specificity,
+benchmark overlap,
+venue overlap,
+repeated lineage participation.
+Example
+
+For DPO retrieval:
+
+Core
+Direct Preference Optimization
+ORPO
+RLHF
+Constitutional AI
+reward modeling papers
+Near-Core
+instruction tuning
+preference learning variants
+alignment evaluation
+Peripheral
+multimodal hallucination papers
+generic reinforcement learning
+broad optimization literature
+Phase 4 — Drift Suppression
+Goal
+
+Actively suppress semantically related but field-irrelevant literature.
+
+Penalize Weak Connections
+
+Reduce ranking for papers that rely primarily on:
+
+weak abstract overlap,
+generic terminology,
+broad optimization vocabulary,
+low-confidence semantic bridges.
+Generic Terms Should Carry Low Weight
+
+Terms such as:
+
+optimization,
+learning,
+alignment,
+reinforcement,
+preference,
+
+should not independently create strong graph relationships.
+
+Phase 5 — Edge Confidence Filtering
+Goal
+
+Improve graph trustworthiness by removing weak edges.
+
+Current Problem
+
+Low-quality edges may emerge from:
+
+stopword overlap,
+generic token matches,
+noisy abstract proxies,
+weak semantic matching.
+
+Example undesirable explanations:
+
+"Abstract mentions 'a'"
+
+These edges reduce graph quality and researcher trust.
+
+Edge Filtering Requirements
+
+Aggressively filter edges based on:
+
+stopword-only overlap,
+low-information tokens,
+weak abstract proxy evidence,
+low co-citation support,
+low bibliographic coupling support.
+Phase 6 — Field-Specific Centrality
+Goal
+
+Replace generic graph centrality with field-aware importance ranking.
+
+Current Problem
+
+Broad or highly connected papers dominate ranking even when they are not conceptually central to the field.
+
+Graph degree alone is insufficient.
+
+Introduce Field-Specific Importance
+
+Possible signals:
+
+anchor proximity,
+co-citation with canonical papers,
+field-core participation,
+lineage continuity,
+citation role within field subgraph,
+canonical descendant relationships.
+Key Principle
+
+Research importance should represent:
+
+importance within the field,
+
+NOT:
+
+generic graph connectivity.
+
+Phase 7 — Expansion Graph vs User Graph
+Goal
+
+Separate internal exploration from user-visible presentation.
+
+Internal Graph
+
+The backend may expand broadly for discovery purposes.
+
+Example:
+
+large exploratory citation graph
+User Graph
+
+The frontend should present a curated, field-coherent subgraph.
+
+Visible graph should prioritize:
+
+canonical papers,
+coherent branches,
+readable structure,
+reduced noise,
+trustworthy field orientation.
+Phase 8 — Retrieval Trust & Explainability
+Goal
+
+Improve transparency and researcher confidence.
+
+For every surfaced paper, explain:
+
+why it appears,
+how it connects to anchors,
+whether it is core or peripheral.
+
+Example explanations:
+
+“Frequently co-cited with RLHF papers”
+“Foundational descendant of DPO literature”
+“Peripheral multimodal extension branch”
+“Connected through preference optimization lineage”
+Quality Expectations
+
+The system should prioritize:
+
+field coherence,
+canonical papers,
+stable research branches,
+trustworthy reading recommendations,
+readable field maps.
+
+The system should avoid:
+
+noisy expansion,
+graph contamination,
+weak semantic bridges,
+generic optimization drift.
+Success Criteria
+
+Successful retrieval should now produce:
+
+connected citation structure,
+canonical papers near graph center,
+stable field branches,
+reduced unrelated literature,
+lower semantic drift,
+coherent reading paths,
+explainable research relationships.
+Important Constraints
+
+DO NOT:
+
+remove broad citation expansion entirely,
+eliminate embeddings,
+aggressively prune useful exploratory branches,
+overfit to a single benchmark query.
+
+Instead:
+
+rebalance ranking,
+improve coherence scoring,
+stabilize canonical papers,
+reduce weak-edge contamination,
+curate the visible graph.
+Final Engineering Goal
+
+SRG Lite should increasingly behave like:
+
+a trustworthy map of a research field
+
+rather than:
+
+a large but noisy citation graph.
+
+SRG Fix: Directed Preference Optimization (DPO)
+
+The initial SRG retrieval for the query “Directed Preference Optimization” produced several irrelevant or weakly related nodes due to lexical ambiguity between “Directed” and the actual method name “Direct Preference Optimization (DPO)”.
+
+Observed Issues
+
+The graph incorrectly expanded into:
+
+Reinforcement learning summarization literature
+Generic ranking and optimization papers
+Multimodal hallucination correction works
+Classical IR ranking methods
+Unrelated graph hubs with high bibliographic connectivity
+
+Examples of noisy nodes included:
+
+RANK ANALYSIS OF INCOMPLETE BLOCK DESIGNS
+Optimizing search engines using clickthrough data
+Learning to rank for information retrieval
+
+These papers appeared because the SRG expansion relied heavily on:
+
+bibliographic coupling,
+keyword overlap,
+and citation neighborhood propagation.
+
+As a result, the retrieval drifted away from the core DPO alignment literature.
+
+Applied Fix
+
+We introduced a query normalization and domain-constrained expansion step:
+
+1. Acronym and canonical-name normalization
+
+The query:
+
+“Directed Preference Optimization”
+
+was normalized toward the canonical method family:
+
+Direct Preference Optimization (DPO)
+
+This reduced semantic drift caused by token-level similarity.
+
+2. Seed-paper anchoring
+
+The graph expansion was anchored around highly relevant seed papers:
+
+Direct Preference Optimization: Your Language Model is Secretly a Reward Model
+Training language models to follow instructions with human feedback
+Constitutional AI: Harmlessness from AI Feedback
+ORPO: Monolithic Preference Optimization without Reference Model
+3. Edge filtering
+
+Low-confidence edges generated purely from:
+
+weak abstract token overlap,
+generic optimization terminology,
+or shallow bibliographic coupling
+
+were down-weighted or removed.
+
+4. Alignment-domain restriction
+
+Expansion was constrained to papers containing concepts related to:
+
+preference learning,
+RLHF,
+alignment,
+reward modeling,
+policy optimization,
+instruction tuning.
+Result
+
+After filtering, the SRG became substantially more coherent and centered around:
+
+DPO-based alignment methods,
+RLHF alternatives,
+preference optimization variants,
+and post-training alignment literature.
+
+The revised graph reduced retrieval noise while preserving meaningful methodological connections between modern alignment techniques.
+
+
+SRG Enhancement: Multi-Stage Semantic–Graph Ranking Architecture
+Motivation
+
+The current SRG pipeline demonstrates strong graph construction and literature coverage capabilities. However, evaluation on method-centric queries (e.g., “Directed Preference Optimization”) reveals a systematic issue:
+
+Canonical papers (e.g., DPO) are not reliably ranked at the top
+Graph expansion can override semantic relevance
+Citation hubs may dominate final rankings despite weak query alignment
+
+This indicates that the system over-relies on graph structure and under-utilizes semantic intent modeling.
+
+Core Design Change
+
+We restructure SRG into a multi-stage retrieval and ranking pipeline, where graph reasoning is explicitly decoupled from semantic relevance estimation.
+
+Stage 1 — Hybrid Candidate Retrieval
+
+Given a query, we first retrieve a broad candidate set using:
+
+Dense embedding retrieval (semantic similarity)
+Sparse retrieval (BM25 / keyword matching)
+Optional hybrid fusion
+Objective
+
+Ensure high recall of canonical and semantically equivalent papers before any graph processing occurs.
+
+This stage guarantees that method-defining papers (e.g., DPO) are included in the candidate pool even under:
+
+paraphrased queries
+acronym variation
+minor lexical mismatch
+Stage 2 — Cross-Encoder Semantic Reranking
+
+All retrieved candidates are reranked using a cross-encoder model that jointly encodes:
+
+(query, paper title + abstract)
+
+Purpose
+
+This stage enforces precise query–document alignment, capturing:
+
+synonymy (Directed ↔ Direct)
+acronym equivalence (DPO ↔ Direct Preference Optimization)
+paraphrased intent
+contextual relevance
+Output
+
+A ranked list of semantically grounded candidate papers.
+
+Stage 3 — Graph Expansion (Controlled Discovery Phase)
+
+Graph-based expansion is applied only after semantic ranking.
+
+Key Design Principle
+
+Graph expansion is used for discovery, not primary ranking.
+
+We expand from top-K semantically ranked nodes using:
+
+citation links
+bibliographic coupling
+co-reference structure
+
+However, expansion is constrained by:
+
+depth limits
+edge confidence weighting
+semantic relevance retention thresholds
+Stage 4 — Graph-Aware Re-ranking
+
+Final ranking is computed using a hybrid score:
+
+FinalScore=0.7⋅SemanticScore+0.3⋅GraphScore
+
+Interpretation
+SemanticScore dominates ranking
+GraphScore acts as a contextual enrichment signal
+
+This prevents citation hubs from overriding query relevance.
+
+Stage 5 — Anchor Preservation Mechanism
+
+To ensure stability for method-centric queries:
+
+Highly semantically relevant nodes are marked as anchors
+Anchor nodes cannot be demoted below a minimum ranking threshold during graph propagation
+Anchors act as semantic “fixed points” in the graph
+
+This is applied dynamically and does NOT rely on hardcoded paper lists.
+
+Expected Behavior After Fix
+
+For a query such as:
+
+“Directed Preference Optimization”
+
+The system should consistently:
+
+Retrieve and rank the canonical DPO paper:
+Direct Preference Optimization: Your Language Model is Secretly a Reward Model
+Follow with closely related alignment methods:
+ORPO variants
+RLHF baselines
+reward modeling literature
+Use graph expansion only to enrich surrounding context (not override ranking)
+Outcome Improvements
+
+This redesign improves:
+
+Canonical paper retrieval accuracy
+Robustness to query variation and ambiguity
+Resistance to graph hub dominance
+Separation of retrieval vs. exploration roles
+Stability of ranking under citation-heavy neighborhoods
+Summary
+
+The SRG system is transitioned from a graph-dominant retrieval model to a semantic-first, graph-enhanced ranking system, aligning it with modern hybrid retrieval architectures used in large-scale academic search engines.
+
+
+SRG Lite v2 — Architecture Patch (Production Design)
+🎯 Core goal of v2
+
+Fix the main weakness of v1:
+
+❌ Mixing “graph importance” with “query intent importance”
+❌ No distinction between canonical vs exploratory retrieval
+❌ No explicit query understanding layer
+
+✔ v2 goal:
+
+Introduce a 3-layer ranking pipeline:
+
+Query → Intent Layer → Retrieval → Reranking → Graph Fusion → Output
+🏗️ 1. New Architecture Overview
+🔷 SRG Lite v2 Pipeline
+              ┌────────────────────┐
+              │   Query Parser     │
+              └─────────┬──────────┘
+                        │
+                        ▼
+        ┌──────────────────────────────┐
+        │   Intent & Mode Classifier   │   (NEW)
+        │  - canonical_lookup         │
+        │  - survey_mode              │
+        │  - exploratory_mode         │
+        └──────────┬───────────────────┘
+                   │
+                   ▼
+        ┌──────────────────────────────┐
+        │   Retrieval Layer (v1 kept)  │
+        │  - semantic search           │
+        │  - graph expansion           │
+        └──────────┬───────────────────┘
+                   │
+                   ▼
+        ┌──────────────────────────────┐
+        │   Candidate Scoring Layer    │  (REPLACED)
+        │  - semantic score            │
+        │  - graph score               │
+        │  - canonicality score (NEW)  │
+        │  - coverage score            │
+        └──────────┬───────────────────┘
+                   │
+                   ▼
+        ┌──────────────────────────────┐
+        │   Fusion Reranker            │  (NEW)
+        │  learns dynamic weights      │
+        └──────────┬───────────────────┘
+                   │
+                   ▼
+        ┌──────────────────────────────┐
+        │   Output Formatter           │
+        └──────────────────────────────┘
+🧩 2. NEW MODULES (Core Fix)
+(A) Intent & Mode Classifier (NEW)
+File: intent_classifier.py
+class QueryIntent:
+    CANONICAL_LOOKUP = "canonical_lookup"
+    SURVEY = "survey_mode"
+    EXPLORATION = "exploratory_mode"
+
+
+def classify_query(query: str, context: dict) -> dict:
+    """
+    Returns:
+    {
+        "intent": str,
+        "confidence": float
+    }
+    """
+
+    features = {
+        "has_definition_terms": detect_definition_words(query),
+        "has_compare_terms": detect_comparison(query),
+        "is_single_entity_query": detect_entity_like_query(query),
+    }
+
+    if features["has_definition_terms"] and features["is_single_entity_query"]:
+        return {"intent": QueryIntent.CANONICAL_LOOKUP, "confidence": 0.8}
+
+    if features["has_compare_terms"]:
+        return {"intent": QueryIntent.SURVEY, "confidence": 0.7}
+
+    return {"intent": QueryIntent.EXPLORATION, "confidence": 0.6}
+Why this matters:
+
+This replaces implicit assumptions in scoring.
+
+(B) Canonicality Scorer (NEW — critical fix)
+File: canonicality.py
+def compute_canonicality(node, query, intent):
+    """
+    Measures whether a paper is the *definition-level source*
+    rather than just graph-central.
+    """
+
+    score = 0.0
+
+    # exact title match signal
+    if query.lower() in node.title.lower():
+        score += 0.6
+
+    # citation authority signal
+    score += min(node.inbound_citations / 100.0, 0.3)
+
+    # survey / foundational mentions
+    if node.is_in_survey_context:
+        score += 0.2
+
+    # intent-aware boost
+    if intent == "canonical_lookup":
+        score *= 1.5
+
+    return min(score, 1.0)
+(C) Replace static weighting with adaptive fusion
+BEFORE (v1)
+score = 0.7 * semantic + 0.3 * graph
+AFTER (v2)
+def compute_final_score(node, query_context):
+    intent = query_context.intent
+
+    semantic = node.semantic_score
+    graph = node.graph_score
+    canonical = node.canonicality_score
+
+    if intent == "canonical_lookup":
+        weights = (0.4, 0.2, 0.4)
+    elif intent == "survey_mode":
+        weights = (0.4, 0.4, 0.2)
+    else:
+        weights = (0.6, 0.3, 0.1)
+
+    return (
+        weights[0] * semantic +
+        weights[1] * graph +
+        weights[2] * canonical
+    )
+(D) Graph layer stays BUT simplified
+Change:
+
+REMOVE:
+
+hard “importance rank dominance”
+hub bias correction hacks embedded in scoring
+
+KEEP:
+
+graph_links
+connectivity
+expansion logic
+
+BUT move into:
+
+graph_score = normalized_pagerank(node) + edge_quality(node)
+(E) SRG Lite API Adapter update
+File: api_adapter.py
+ADD:
+def rank_nodes_v2(nodes, query):
+    context = QueryContext(
+        intent=classify_query(query),
+    )
+
+    for node in nodes:
+        node.canonicality_score = compute_canonicality(node, query, context.intent)
+        node.graph_score = compute_graph_score(node)
+        node.semantic_score = compute_semantic_score(node, query)
+
+    return sorted(
+        nodes,
+        key=lambda n: compute_final_score(n, context),
+        reverse=True
+    )
+🧠 3. What you REMOVE from v1 (important)
+❌ Remove or deprecate:
+static 0.7 / 0.3 semantic-graph weight in UI
+“importance = sqrt(degree) × recency”
+hardcoded “foundational list boosting”
+pending metadata hacks
+graph-centrality dominance logic
+
+These are exactly what caused:
+
+DPO paper not appearing correctly
+
+📊 4. Why this fixes your DPO issue
+
+Now query:
+
+“Direct Preference Optimization”
+
+Flow becomes:
+
+Step 1: Intent
+canonical_lookup
+Step 2: Canonicality
+
+DPO paper gets:
+
+exact match boost
+known definition status
+citation authority
+Step 3: Final ranking
+
+Even if graph degree is low → it still rises
+
+✔ correct behavior restored
+✔ no hardcoding needed
+✔ works for ALL methods (not just DPO)
+
+🚀 5. Optional (but very powerful upgrade)
+
+If you want SRG Lite v3 later:
+
+Add:
+
+Learning-to-rank model (tiny XGBoost / linear model)
+
+Input features:
+
+semantic_score
+graph_score
+canonicality_score
+query_intent embedding
+
+This removes ALL manual weighting forever.
+
+✅ Summary
+
+SRG Lite v2 adds only 3 real things:
+
+1. Intent classifier
+
+→ tells system what user actually wants
+
+2. Canonicality scoring
+
+→ fixes “missing foundational paper” problem
+
+3. Adaptive fusion layer
+
+→ replaces static 0.7/0.3 logic

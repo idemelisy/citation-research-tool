@@ -1,16 +1,21 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from dataclasses import asdict
 from datetime import datetime
+import difflib
+import math
 import re
 from typing import Any
 
 import requests
 
+from .canonicality import compute_canonicality, infer_survey_context_flag
 from .citation_context import enrich_graph_with_citation_snippets
 from .domain_mapper import domain_from_openalex_payload, domain_from_venue_name
 from .discovery import RelationParams, SuggestionEngine, score_expand_relations
+from .graph_scores import compute_graph_score_bundle
+from .intent_classifier import classify_query
 from .evaluation import QualityReport, build_quality_report
 from .feedback import FeedbackStore
 from .graph import CitationGraphBuilder, GraphSnapshot, SemanticMetrics
@@ -36,6 +41,20 @@ from .schema import Author, FeedbackEvent, PaperRecord, Provenance
 EXPAND_CANDIDATE_POOL_MAX = 200
 EXPAND_DISPLAY_TOP_N = 50
 
+# Alignment lexicon for semantic ranking / IR-noise suppression (multi-stage semantic–graph phase).
+_SEMANTIC_ALIGNMENT_LEXICON: tuple[str, ...] = (
+    "preference optimization",
+    "reward model",
+    "rlhf",
+    "human feedback",
+    "instruction tuning",
+    "policy optimization",
+    "alignment",
+    "preference learning",
+    "dpo",
+)
+
+from .ranking_fusion import compute_final_score, fusion_weights_for_intent
 from .validation import DeduplicationEngine
 from .visualization import edge_style
 
@@ -90,6 +109,92 @@ def _report_to_json(report: QualityReport) -> dict[str, Any]:
 
 class SRGApplicationService:
     """UI-facing facade that mimics API-shaped payloads."""
+
+    @staticmethod
+    def _anchor_hop_distances(
+        node_ids: list[str],
+        edges: list[dict[str, Any]],
+        anchor_ids: set[str],
+    ) -> dict[str, int]:
+        """Undirected BFS from seed anchors — citation distance for coherence decay (Phase 2)."""
+        adj: dict[str, set[str]] = defaultdict(set)
+        for e in edges:
+            s, t = e.get("source"), e.get("target")
+            if not s or not t:
+                continue
+            adj[str(s)].add(str(t))
+            adj[str(t)].add(str(s))
+        dist: dict[str, int] = {}
+        dq: deque[str] = deque()
+        for a in anchor_ids:
+            if a in adj or a in node_ids:
+                if a not in dist:
+                    dist[a] = 0
+                    dq.append(a)
+        while dq:
+            u = dq.popleft()
+            for v in adj.get(u, ()):
+                if v not in dist:
+                    dist[v] = dist[u] + 1
+                    dq.append(v)
+        return {nid: int(dist.get(nid, 99)) for nid in node_ids}
+
+    @staticmethod
+    def _targets_alignment_topic(query_profile: dict[str, Any]) -> bool:
+        blob = ((query_profile.get("query_text") or "") + " " + " ".join(query_profile.get("query_terms") or [])).lower()
+        keys = (
+            "dpo",
+            "rlhf",
+            "preference",
+            "alignment",
+            "orpo",
+            "reward",
+            "human feedback",
+            "instruction",
+            "constitutional",
+            "direct preference",
+        )
+        return any(k in blob for k in keys)
+
+    @staticmethod
+    def _alignment_lexicon_density_semantic(node: dict[str, Any]) -> float:
+        blob = f"{node.get('title', '')} {node.get('abstract', '')}".lower()
+        hits = sum(1 for t in _SEMANTIC_ALIGNMENT_LEXICON if t in blob)
+        return hits / max(len(_SEMANTIC_ALIGNMENT_LEXICON), 1)
+
+    def _semantic_fit_score(self, node: dict[str, Any], query_profile: dict[str, Any]) -> float:
+        """
+        Lightweight semantic relevance [0,1]: token overlap + title similarity (BM25/cross-encoder surrogate).
+        Used when lite_semantic_graph_ranking — semantic intent dominates over raw graph hubs.
+        """
+        qt = (query_profile.get("query_text") or "").strip().lower()
+        title = (node.get("title") or "").lower()
+        abstract = (node.get("abstract") or "").lower()
+        terms = [str(t).lower() for t in (query_profile.get("query_terms") or []) if len(str(t).strip()) > 2]
+        blob = f"{title} {abstract[:2200]}"
+        if not qt:
+            return 0.45
+        overlap = sum(1 for t in terms if t in blob)
+        tok = min(1.0, overlap / max(len(terms), 1) * 1.75)
+        seq = difflib.SequenceMatcher(a=qt[:160], b=title[:220]).ratio()
+        score = 0.4 * tok + 0.48 * seq
+        if any(x in qt for x in ("dpo", "direct preference", "preference optimization")):
+            if "direct preference optimization" in title:
+                score += 0.16
+            if "2305.18290" in str(node.get("id", "")).lower():
+                score += 0.12
+        if self._targets_alignment_topic(query_profile):
+            noise = (
+                "learning to rank",
+                "clickthrough",
+                "search engine",
+                "incomplete block design",
+                "information retrieval",
+                "optimizing search engines",
+            )
+            if any(p in title for p in noise) and self._alignment_lexicon_density_semantic(node) < 0.07:
+                score *= 0.32
+        return max(0.0, min(1.0, score))
 
     def __init__(self, cache_db: str = "srg_cache.db", feedback_db: str = "srg_feedback.db") -> None:
         self.feedback_store = FeedbackStore(db_path=feedback_db)
@@ -200,24 +305,88 @@ class SRGApplicationService:
         if "pii" in low or "identifiable" in low or "privacy" in low:
             variants.append(f'{base} OR "Personally Identifiable Information"')
             variants.append(f'{base} OR "data privacy"')
+        elif any(
+            k in low
+            for k in (
+                "dpo",
+                "direct preference",
+                "preference optimization",
+                "rlhf",
+                "human feedback",
+                "preference learning",
+                "alignment",
+                "reward model",
+                "orpo",
+                "constitutional ai",
+            )
+        ):
+            variants.extend(
+                [
+                    "direct preference optimization language model",
+                    "reinforcement learning from human feedback language model",
+                    "preference optimization large language model",
+                ]
+            )
         elif len(base.split()) <= 2:
             variants.append(f"{base} OR survey")
         return list(dict.fromkeys(v for v in variants if v))
 
     @staticmethod
-    def _dpo_priority_seeds_for_query(q: str) -> list[dict[str, Any]]:
+    def _canonical_anchor_seeds_for_query(q: str) -> list[dict[str, Any]]:
         """
-        Ensure canonical DPO papers are present when user intent is clearly DPO-oriented.
+        Phase 1 — anchor papers for known acronyms / canonical lines of work (arXiv ids).
+        Keeps retrieval anchored before citation-neighborhood expansion.
         """
         low = (q or "").lower()
-        if "dpo" not in low and "direct preference optimization" not in low:
-            return []
-        # Canonical DPO paper and a small set of foundational follow-ups.
-        must_have_ids = [
-            "2305.18290",  # Direct Preference Optimization: Your Language Model is Secretly a Reward Model
-            "2404.19733",  # SimPO: Simple Preference Optimization with a Reference-Free Reward
-        ]
-        return [{"provider": "arxiv", "id": aid, "origin": "api_search"} for aid in must_have_ids]
+        words = set(re.findall(r"[a-z0-9]+", low))
+        out: list[dict[str, Any]] = []
+
+        def add(aid: str) -> None:
+            out.append({"provider": "arxiv", "id": aid, "origin": "api_search"})
+
+        # Preference / alignment neighborhood (retrieval repair — multiple anchors, not one semantic hit).
+        if any(
+            k in low
+            for k in (
+                "dpo",
+                "direct preference optimization",
+                "preference optimization",
+                "rlhf",
+                "reinforcement learning from human feedback",
+                "preference learning",
+                "human feedback",
+                "reward model",
+                "constitutional ai",
+                "orpo",
+                "simpo",
+            )
+        ) or ("alignment" in low and any(w in words for w in ("llm", "language", "model", "lm"))):
+            for aid in (
+                "2305.18290",
+                "2404.19733",
+                "2203.02155",
+                "2212.08073",
+                "2403.07691",
+                "2009.01325",
+            ):
+                add(aid)
+        if "attention is all you need" in low or (
+            "transformer" in low and ("attention" in low or "nlp" in low or "language model" in low)
+        ):
+            add("1706.03762")
+        if "lora" in words or "low-rank adaptation" in low:
+            add("2106.09685")
+        if "bert" in words and len(low.split()) <= 8:
+            add("1810.04805")
+
+        dedup: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for s in out:
+            k = f"{s['provider']}:{s['id']}"
+            if k not in seen:
+                seen.add(k)
+                dedup.append(s)
+        return dedup
 
     def _openalex_seed_from_work(self, work: dict[str, Any]) -> dict[str, Any] | None:
         oid = (work.get("id") or "").rsplit("/", maxsplit=1)[-1]
@@ -303,6 +472,16 @@ class SRGApplicationService:
                 intent = si
                 break
         return {"query_text": q, "query_terms": terms[:12], "query_intent": intent}
+
+    @staticmethod
+    def _openalex_cited_by_count(merged_by_id: dict[str, PaperRecord], paper_id: str) -> int:
+        prx = merged_by_id.get(paper_id)
+        if not prx:
+            return 0
+        for pv in prx.provenance or []:
+            if pv.source == "openalex" and isinstance(pv.raw, dict):
+                return int(pv.raw.get("cited_by_count") or 0)
+        return 0
 
     @staticmethod
     def _paper_query_match_score(paper: dict[str, Any], query_terms: list[str]) -> float:
@@ -652,6 +831,9 @@ class SRGApplicationService:
         diagnostics: list[str] = []
         if not q:
             return []
+        ql = q.lower()
+        if "directed preference optimization" in ql:
+            q = ql.replace("directed preference optimization", "direct preference optimization", 1)
         q_terms = self._tokenize_query_terms(q)
         q_intent = self._query_intent_from_text(q)
 
@@ -677,7 +859,7 @@ class SRGApplicationService:
                     sq = arxiv_search_query_from_user_text(qq)
                     hits = ArXivClient().search(sq, max_results=max(1, min(arxiv_search_max_results, 50)))
                     seeds.extend({"provider": "arxiv", "id": h["id"], "origin": "api_search"} for h in hits if h.get("id"))
-                seeds.extend(self._dpo_priority_seeds_for_query(q))
+                seeds.extend(self._canonical_anchor_seeds_for_query(q))
                 if self._is_pii_concept_query(q):
                     seeds.extend(self._openalex_pii_concept_seed_hits(diagnostics))
                 dedup: list[dict[str, Any]] = []
@@ -694,14 +876,20 @@ class SRGApplicationService:
         try:
             seeds: list[dict[str, Any]] = []
             oa = OpenAlexClient()
+            oa_cap = 20
+            per_variant = 8
             for qq in self._expanded_query_variants(q):
+                if len(seeds) >= oa_cap:
+                    break
                 result = oa.search_by_title(qq)
-                rows = result.get("results", [])
-                if rows:
-                    top = rows[0]
+                rows = result.get("results", []) or []
+                for top in rows[:per_variant]:
+                    if len(seeds) >= oa_cap:
+                        break
                     oid = (top.get("id") or "").rsplit("/", maxsplit=1)[-1]
                     if oid:
                         seeds.append({"provider": "openalex", "id": oid, "origin": "api_search"})
+            seeds.extend(self._canonical_anchor_seeds_for_query(q))
             # PII / privacy phrases rarely match /works?search=…; still run the concept-based probe.
             if self._is_pii_concept_query(q):
                 seeds.extend(self._openalex_pii_concept_seed_hits(diagnostics))
@@ -798,14 +986,33 @@ class SRGApplicationService:
         }
         two_hop_budget = int(opts.get("two_hop_budget", 120) or 120)
         two_hop_budget = max(30, min(300, two_hop_budget))
+        lite_field_aware = bool(opts.get("lite_field_aware", False))
+        lite_retrieval_repair = bool(opts.get("lite_retrieval_repair", False))
+        lite_coherence_stabilization = bool(opts.get("lite_coherence_stabilization", False))
+        lite_v2_ranking = bool(opts.get("lite_v2_ranking", False))
+        lite_semantic_graph_ranking = bool(opts.get("lite_semantic_graph_ranking", False))
+        if lite_v2_ranking:
+            # SRG Lite v2 replaces the static semantic/graph blend with intent + canonicality fusion.
+            lite_semantic_graph_ranking = False
+        sem_w = float(opts.get("semantic_graph_sem_weight", 0.7) or 0.7)
+        graph_w = float(opts.get("semantic_graph_graph_weight", 0.3) or 0.3)
+        sw_sum = sem_w + graph_w
+        if sw_sum > 0:
+            sem_w, graph_w = sem_w / sw_sum, graph_w / sw_sum
+        if lite_retrieval_repair:
+            floor = int(opts.get("two_hop_budget_floor", 200) or 200)
+            two_hop_budget = max(two_hop_budget, max(30, min(300, floor)))
         diagnostics: list[str] = []
         skipped_ids: list[str] = []
         if len(effective_seeds) < 12:
             concept_threshold = max(0.15, concept_threshold - 0.15)
-            relation_topic_weight = max(0.2, relation_topic_weight)
+            if not lite_field_aware:
+                relation_topic_weight = max(0.2, relation_topic_weight)
             coupling_threshold = min(coupling_threshold, 2)
             diagnostics.append(
                 "Soğuk başlangıç algılandı: concept eşiği düşürüldü ve topic sinyali geçici olarak artırıldı."
+                if not lite_field_aware
+                else "Cold start: keeping citation-first ranking (field-aware mode)."
             )
         auto_escalated = False
         if len(effective_seeds) < top_n and not enable_two_hop:
@@ -995,10 +1202,16 @@ class SRGApplicationService:
         expand_relation_filter_active = any(
             s.get("origin") in ("discovered", "topic_discovered", "discovered_2hop") for s in effective_seeds
         )
+        rel_params = RelationParams(
+            w_direct=float(opts.get("w_direct", 2.0) or 2.0),
+            w_coupling=float(opts.get("w_coupling", 0.6) or 0.6),
+            w_cocitation=float(opts.get("w_cocitation", 0.8) or 0.8),
+            w_topic=relation_topic_weight,
+        )
         expand_scores = score_expand_relations(
             graph,
             anchor_ids,
-            RelationParams(w_topic=relation_topic_weight),
+            rel_params,
         )
         for node in graph_json["nodes"]:
             if node.get("seed_origin") != "discovered":
@@ -1026,6 +1239,14 @@ class SRGApplicationService:
         for i, n in enumerate(discovered_ranked, start=1):
             n["expand_rank"] = i
 
+        hop_map: dict[str, int] = {}
+        if lite_coherence_stabilization:
+            hop_map = SRGApplicationService._anchor_hop_distances(
+                [n["id"] for n in graph_json["nodes"]],
+                graph_json.get("edges") or [],
+                anchor_ids,
+            )
+
         out_deg = Counter(e["source"] for e in graph_json["edges"])
         in_deg = Counter(e["target"] for e in graph_json["edges"])
         rec_list = self.discovery.recommend_missing_links(graph, foundational_boost=foundational_boost)
@@ -1034,18 +1255,81 @@ class SRGApplicationService:
         references_total = sum(len(p.references or []) for p in merged_records)
         evidence_edges = len(graph_json.get("edges") or [])
         metadata_only_mode = references_total == 0 and evidence_edges == 0
+        node_ids_list = [n["id"] for n in graph_json["nodes"]]
+        v2_intent = ""
+        v2_confidence = 0.0
+        v2_fusion = (0.6, 0.3, 0.1)
+        pr_n: dict[str, float] = {}
+        eq_n: dict[str, float] = {}
+        graph_combined: dict[str, float] = {}
+        qtext_for_v2 = ""
+        if lite_v2_ranking:
+            qtext_for_v2 = (query_profile.get("query_text") or "").strip()
+            if not qtext_for_v2:
+                qtext_for_v2 = " ".join(str(t) for t in (query_profile.get("query_terms") or []))
+            icr = classify_query(qtext_for_v2, {})
+            v2_intent = str(icr.get("intent") or "")
+            v2_confidence = float(icr.get("confidence") or 0.0)
+            v2_fusion = fusion_weights_for_intent(v2_intent)
+            pr_n, eq_n, graph_combined = compute_graph_score_bundle(
+                graph_json.get("edges") or [], node_ids_list
+            )
+
         for node in graph_json["nodes"]:
             pid = node["id"]
             citation_count = int(out_deg[pid] + in_deg[pid])
             node["citation_count"] = citation_count
+
+            if lite_v2_ranking:
+                q_match = self._paper_query_match_score(node, query_profile.get("query_terms") or [])
+                node["query_match_score"] = q_match
+                sem = self._semantic_fit_score(node, query_profile)
+                gscore = float(graph_combined.get(pid, 0.45))
+                node["pagerank_norm"] = round(float(pr_n.get(pid, 0.0)), 4)
+                node["edge_quality_norm"] = round(float(eq_n.get(pid, 0.0)), 4)
+                inbound = SRGApplicationService._openalex_cited_by_count(merged_by_id, pid)
+                survey_ctx = infer_survey_context_flag(node)
+                canon = compute_canonicality(
+                    node,
+                    qtext_for_v2,
+                    v2_intent,
+                    inbound_citations=inbound,
+                    is_in_survey_context=survey_ctx,
+                )
+                raw = compute_final_score(sem, gscore, canon, v2_intent)
+                node["semantic_score"] = round(float(sem), 4)
+                node["graph_score"] = round(float(gscore), 4)
+                node["canonicality_score"] = round(float(canon), 4)
+                node["semantic_fit_score"] = round(float(sem), 4)
+                if lite_coherence_stabilization:
+                    node["anchor_graph_hops"] = int(hop_map.get(pid, 99))
+                if metadata_only_mode:
+                    raw *= 0.72
+                node["relevance_raw"] = raw
+                raw_scores.append(raw)
+                continue
+
             rec = rec_map.get(pid, 0.0)
             ml = float(node.get("missing_link_score") or 0)
             rel = float(node.get("relation_expand_score", 0.0))
             q_match = self._paper_query_match_score(node, query_profile.get("query_terms") or [])
             node["query_match_score"] = q_match
             intent = (query_profile.get("query_intent") or "method").lower()
-            # Intent-aware weighting: generic centrality is useful, but topic match should dominate for specificity.
-            if intent == "survey":
+            # Intent-aware weighting; lite_field_aware prioritizes citation neighborhoods over lexical match.
+            if lite_field_aware:
+                if intent == "survey":
+                    raw = citation_count * 0.42 + rec * 1.0 + ml * 1.85 + rel * 3.6 + q_match * 1.35
+                elif intent == "recent":
+                    year_bonus = 0.0
+                    y = node.get("year")
+                    if isinstance(y, int):
+                        year_bonus = max(0.0, min(1.0, (y - 2018) / 8.0))
+                    raw = citation_count * 0.28 + rec * 1.0 + ml * 1.65 + rel * 4.3 + q_match * 1.45 + year_bonus * 1.2
+                elif intent == "application":
+                    raw = citation_count * 0.28 + rec * 1.0 + ml * 2.0 + rel * 4.1 + q_match * 1.65
+                else:
+                    raw = citation_count * 0.28 + rec * 1.05 + ml * 2.0 + rel * 4.8 + q_match * 1.6
+            elif intent == "survey":
                 raw = citation_count * 0.55 + rec * 1.1 + ml * 1.6 + rel * 2.0 + q_match * 2.5
             elif intent == "recent":
                 year_bonus = 0.0
@@ -1066,6 +1350,47 @@ class SRGApplicationService:
                     "direct preference optimization" in ttl and "secretly a reward model" in ttl
                 ):
                     raw += 2.5
+            # Field coherence & canonicality (Phase: stabilize ranking, penalize distant / lexical-only nodes).
+            if lite_coherence_stabilization:
+                pid = node["id"]
+                hops = int(hop_map.get(pid, 99))
+                node["anchor_graph_hops"] = hops
+                decay_table = {0: 1.0, 1: 1.0, 2: 0.9, 3: 0.78, 4: 0.62}
+                decay = decay_table.get(min(hops, 4), 0.48 if hops < 99 else 0.4)
+                raw *= decay
+                qm = float(node.get("query_match_score", 0.0))
+                rel_sc = float(node.get("relation_expand_score", 0.0))
+                if (
+                    qm > 0.42
+                    and rel_sc < 0.12
+                    and node.get("seed_origin") == "discovered"
+                    and not node.get("is_foundational_hub")
+                ):
+                    raw *= 0.8
+                prx = merged_by_id.get(pid)
+                cited_by_n = 0
+                if prx:
+                    for pv in prx.provenance or []:
+                        if pv.source == "openalex" and isinstance(pv.raw, dict):
+                            cited_by_n = int(pv.raw.get("cited_by_count") or 0)
+                            break
+                raw += math.log1p(max(0, cited_by_n)) * 0.11
+                if node.get("is_foundational_hub"):
+                    raw += 0.5
+                if node.get("seed_origin") == "api_search":
+                    raw += 0.32
+            # Multi-stage semantic–graph ranking: semantic fit dominates; graph score enriches (Stage 4).
+            if lite_semantic_graph_ranking:
+                sem_fit = self._semantic_fit_score(node, query_profile)
+                node["semantic_fit_score"] = round(float(sem_fit), 4)
+                graph_component = float(raw)
+                sem_scale = float(opts.get("semantic_fit_scale", 14.0) or 14.0)
+                sem_component = sem_fit * sem_scale
+                raw = sem_w * sem_component + graph_w * graph_component
+                if sem_fit >= 0.78:
+                    raw = max(raw, sem_component * 0.94 + 1.0)
+                if sem_fit >= 0.72 and float(node.get("query_match_score", 0.0)) >= 0.48:
+                    raw += 0.55
             # Hard quality gate: if no references/edges, keep ranking but mark metadata-only and soften scores.
             if metadata_only_mode:
                 raw *= 0.72
@@ -1089,23 +1414,56 @@ class SRGApplicationService:
         # If no foundational hubs were detected by strict criteria, promote top query-relevant nodes
         # so users can still see meaningful gold anchors in sparse metadata runs.
         if not any(bool(n.get("is_foundational_hub")) for n in graph_json["nodes"]):
-            promoted = sorted(
-                graph_json["nodes"],
-                key=lambda n: (
-                    float(n.get("query_match_score", 0.0)),
-                    float(n.get("relevance_diverse_norm", n.get("relevance_norm", 0.0))),
-                ),
-                reverse=True,
-            )
-            promoted_count = 0
-            for n in promoted:
-                if float(n.get("query_match_score", 0.0)) < 0.5:
-                    continue
-                n["is_foundational_hub"] = True
-                n["inclusion_reasons"] = list(dict.fromkeys((n.get("inclusion_reasons") or []) + ["promoted_anchor"]))
-                promoted_count += 1
-                if promoted_count >= 2:
-                    break
+            if lite_coherence_stabilization:
+                promoted = sorted(
+                    graph_json["nodes"],
+                    key=lambda n: (
+                        float(n.get("relation_expand_score", 0.0)),
+                        -float(n.get("anchor_graph_hops", 99)),
+                        float(n.get("relevance_diverse_norm", n.get("relevance_norm", 0.0))),
+                    ),
+                    reverse=True,
+                )
+                promoted_count = 0
+                for n in promoted:
+                    if int(n.get("anchor_graph_hops", 99)) > 6:
+                        continue
+                    if float(n.get("relation_expand_score", 0.0)) < 0.04 and float(n.get("query_match_score", 0.0)) < 0.38:
+                        continue
+                    n["is_foundational_hub"] = True
+                    n["inclusion_reasons"] = list(dict.fromkeys((n.get("inclusion_reasons") or []) + ["promoted_anchor"]))
+                    promoted_count += 1
+                    if promoted_count >= 2:
+                        break
+            else:
+                promoted = sorted(
+                    graph_json["nodes"],
+                    key=lambda n: (
+                        float(n.get("query_match_score", 0.0)),
+                        float(n.get("relevance_diverse_norm", n.get("relevance_norm", 0.0))),
+                    ),
+                    reverse=True,
+                )
+                promoted_count = 0
+                for n in promoted:
+                    if float(n.get("query_match_score", 0.0)) < 0.5:
+                        continue
+                    n["is_foundational_hub"] = True
+                    n["inclusion_reasons"] = list(dict.fromkeys((n.get("inclusion_reasons") or []) + ["promoted_anchor"]))
+                    promoted_count += 1
+                    if promoted_count >= 2:
+                        break
+
+        if lite_coherence_stabilization:
+            for node in graph_json["nodes"]:
+                hops = int(node.get("anchor_graph_hops", 99))
+                rel_sc = float(node.get("relation_expand_score", 0.0))
+                if node.get("is_foundational_hub") or hops <= 1 or rel_sc >= 0.22:
+                    node["field_coherence_tier"] = "core"
+                elif hops <= 2 or rel_sc >= 0.1:
+                    node["field_coherence_tier"] = "near_core"
+                else:
+                    node["field_coherence_tier"] = "peripheral"
 
         if metadata_only_mode:
             evidence_quality = "low"
@@ -1129,6 +1487,43 @@ class SRGApplicationService:
                 node["viz_size"] = 16
 
         self._assign_foundational_graph_layout(graph_json["nodes"])
+
+        n_gnodes = len(graph_json.get("nodes") or [])
+        n_gedges = len(graph_json.get("edges") or [])
+        n_api_seeds = sum(1 for s in effective_seeds if (s.get("origin") or "") == "api_search")
+        rq_warnings: list[str] = []
+        if lite_retrieval_repair or lite_field_aware:
+            if n_gnodes >= 2 and n_gedges < 2:
+                rq_warnings.append(
+                    "This map has very few citation links, so it may look disconnected. "
+                    "Try a specific DOI or arXiv id, or run again if the APIs were rate-limited."
+                )
+            if n_gnodes >= 4 and int(references_total) < 20:
+                rq_warnings.append(
+                    "Reference metadata looks sparse — citation expansion may be incomplete until providers return full records."
+                )
+            if n_api_seeds < 3 and n_gnodes >= 2:
+                rq_warnings.append(
+                    "Few query anchors resolved — OpenAlex may have returned limited matches for this phrasing."
+                )
+        if lite_coherence_stabilization:
+            lite_display_relevance_floor = float(opts.get("lite_user_graph_relevance_floor", 0.14) or 0.14)
+        else:
+            lite_display_relevance_floor = float(opts.get("lite_user_graph_relevance_floor", 0.0) or 0.0)
+        retrieval_quality: dict[str, Any] = {
+            "warnings": rq_warnings,
+            "node_count": n_gnodes,
+            "edge_count": n_gedges,
+            "api_search_seed_count": n_api_seeds,
+            "effective_seed_total": len(effective_seeds),
+            "references_total": int(references_total),
+            "lite_retrieval_repair": lite_retrieval_repair,
+            "lite_coherence_stabilization": lite_coherence_stabilization,
+            "lite_semantic_graph_ranking": lite_semantic_graph_ranking,
+            "lite_v2_ranking": lite_v2_ranking,
+            "v2_intent": v2_intent if lite_v2_ranking else "",
+            "v2_intent_confidence": v2_confidence if lite_v2_ranking else 0.0,
+        }
 
         return {
             "papers": graph_json["nodes"],
@@ -1171,6 +1566,20 @@ class SRGApplicationService:
                 "enable_two_hop": enable_two_hop,
                 "concept_threshold": concept_threshold,
                 "relation_topic_weight": relation_topic_weight,
+                "lite_field_aware": lite_field_aware,
+                "lite_retrieval_repair": lite_retrieval_repair,
+                "lite_coherence_stabilization": lite_coherence_stabilization,
+                "lite_semantic_graph_ranking": lite_semantic_graph_ranking,
+                "semantic_graph_sem_weight": sem_w,
+                "semantic_graph_graph_weight": graph_w,
+                "lite_v2_ranking": lite_v2_ranking,
+                "v2_intent": v2_intent,
+                "v2_intent_confidence": v2_confidence,
+                "v2_fusion_weights": {
+                    "semantic": v2_fusion[0],
+                    "graph": v2_fusion[1],
+                    "canonicality": v2_fusion[2],
+                },
                 "foundational_boost": foundational_boost,
                 "openalex_skipped_ids": list(dict.fromkeys(skipped_ids)),
                 "pool_fill_notes": self._expand_pool_fill_notes(
@@ -1213,14 +1622,64 @@ class SRGApplicationService:
             "ingestion_stats": dict(getattr(self.orchestrator, "last_ingestion_stats", {}) or {}),
             "discipline_applied": dom,
             "pdf_quality_gate": dict(getattr(self, "_last_pdf_gate_stats", {}) or {}),
-            "query_profile": query_profile,
+            "query_profile": (
+                {
+                    **query_profile,
+                    "intent_mode_v2": v2_intent,
+                    "intent_confidence_v2": v2_confidence,
+                }
+                if lite_v2_ranking
+                else query_profile
+            ),
             "metadata_only_mode": metadata_only_mode,
             "evidence_quality": evidence_quality,
             "evidence_stats": {
                 "references_total": int(references_total),
                 "graph_edges_total": int(evidence_edges),
             },
+            "lite_display_relevance_floor": lite_display_relevance_floor,
+            "retrieval_quality": retrieval_quality,
         }
+
+    def rank_nodes_v2(
+        self,
+        nodes: list[dict[str, Any]],
+        query: str,
+        *,
+        merged_by_id: dict[str, PaperRecord],
+        edges: list[dict[str, Any]],
+        query_terms: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        SRG Lite v2 ordering helper — intent classifier, canonicality, PageRank/edge-quality graph score,
+        and adaptive fusion (same logic as ``run_pipeline`` with ``lite_v2_ranking``).
+        """
+        qp: dict[str, Any] = {
+            "query_text": (query or "").strip(),
+            "query_terms": list(query_terms or []),
+            "query_intent": "method",
+        }
+        ids = [str(n["id"]) for n in nodes]
+        _, _, graph_combined = compute_graph_score_bundle(edges, ids)
+        icr = classify_query((query or "").strip(), {})
+        intent = str(icr.get("intent") or "")
+        ranked: list[tuple[float, dict[str, Any]]] = []
+        for node in nodes:
+            pid = node["id"]
+            sem = self._semantic_fit_score(node, qp)
+            gs = float(graph_combined.get(pid, 0.45))
+            inbound = SRGApplicationService._openalex_cited_by_count(merged_by_id, pid)
+            canon = compute_canonicality(
+                node,
+                (query or "").strip(),
+                intent,
+                inbound_citations=inbound,
+                is_in_survey_context=infer_survey_context_flag(node),
+            )
+            score = compute_final_score(sem, gs, canon, intent)
+            ranked.append((score, node))
+        ranked.sort(key=lambda x: x[0], reverse=True)
+        return [x[1] for x in ranked]
 
     def submit_merge_feedback(self, left_id: str, right_id: str, accepted: bool = True) -> None:
         self.feedback_store.add(

@@ -80,13 +80,23 @@ def run_streamlit(projects_dir: str | None = None) -> int:
     )
 
 
+def run_streamlit_lite(projects_dir: str | None = None) -> int:
+    env = os.environ.copy()
+    if projects_dir:
+        env["SRG_PROJECTS_DIR"] = projects_dir
+    return subprocess.call(
+        [sys.executable, "-m", "streamlit", "run", "src/srg/app_ui_lite.py"],
+        env=env,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="SRG application entrypoint")
     parser.add_argument(
         "--mode",
-        choices=["demo", "ui"],
+        choices=["demo", "ui", "ui-lite"],
         default="demo",
-        help="demo: CLI pipeline output, ui: launch Streamlit interface",
+        help="demo: CLI pipeline output, ui: full Streamlit UI, ui-lite: SRG Lite guided UI",
     )
     parser.add_argument(
         "--projects-dir",
@@ -98,6 +108,8 @@ def main() -> None:
 
     if args.mode == "ui":
         raise SystemExit(run_streamlit(args.projects_dir))
+    if args.mode == "ui-lite":
+        raise SystemExit(run_streamlit_lite(args.projects_dir))
     run_demo()
 
 
