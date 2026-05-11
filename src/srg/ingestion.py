@@ -588,8 +588,10 @@ class OpenAlexClient(BaseHTTPClient):
                 out.append(tail)
         return out
 
-    def search_by_title(self, title: str) -> dict[str, Any]:
-        return self._get("/works", params={"search": title, "per-page": 1})
+    def search_by_title(self, title: str, *, per_page: int = 5) -> dict[str, Any]:
+        """OpenAlex ``/works?search=`` — request multiple hits for anchor disambiguation (not only rank-1)."""
+        n = max(1, min(25, int(per_page)))
+        return self._get("/works", params={"search": title, "per-page": n})
 
     def normalize(self, payload: dict[str, Any]) -> PaperRecord:
         pid = payload.get("id", "")

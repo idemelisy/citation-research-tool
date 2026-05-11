@@ -1,6 +1,6 @@
 # SRG Lite reading list
 
-Generated: 2026-05-11T14:10:02.397854
+Generated: 2026-05-11T14:36:20.981843
 Query: graph neural networks
 
 

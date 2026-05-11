@@ -1,123 +1,125 @@
 # SRG Lite reading list
 
-Generated: 2026-05-11T12:45:37.635652
-Query: hardware accelerated tessellation
+Generated: 2026-05-11T14:08:44.633917
+Query: transformer attention mechanism
 
 
 ## Reading list
 
-### 1. Adaptive Hardware-accelerated Terrain Tessellation
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: within 0 undirected hop(s) of query seeds. - Topic overlap with your query: hardw…
+### 1. A novel time–frequency Transformer based on self–attention mechanism and its application in fault diagnosis of rolling bearings
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: within 0 undirected hop(s) of query seeds. - Topic overlap with your query: transformer, attention, mecha…
 
-### 2. Approximating subdivision surfaces with Gregory patches for hardware tessellation
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query:…
+### 2. Intelligent fault diagnosis method of planetary gearboxes based on convolution neural network and discrete wavelet transform
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: direct citation tie to a query seed in this map.
 
-### 3. Geometry clipmaps
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: shared references with seed neighborhood (bibliographic coupling).
+### 3. Understanding and improving deep learning-based rolling bearing fault diagnosis with attention mechanism
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: attention, mechanism.
 
-### 4. Displaced subdivision surfaces
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: shared references with seed neighborhood (bibliographic coupling).
+### 4. Multiple-Order Graphical Deep Extreme Learning Machine for Unsupervised Fault Diagnosis of Rolling Bearing
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: direct citation tie to a query seed in this map.
 
-### 5. Phong Tessellation
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: within 2 undirected hop(s) of query seeds. - Topic overlap with your query: tesse…
+### 5. A novel deep autoencoder feature learning method for rotating machinery fault diagnosis
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
 
-### 6. Interpolatory sqrt(3)-Subdivision.
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: within 2 undirected hop(s) of query seeds.
+### 6. Bearing fault diagnosis with auto-encoder extreme learning machine: A comparative study
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
 
-### 7. A realtime GPU subdivision kernel
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: within 2 undirected hop(s) of query seeds.
+### 7. An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: transformer.
 
-### 8. A butterfly subdivision scheme for surface interpolation with tension control
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: within 2 undirected hop(s) of query seeds.
+### 8. Rolling bearing fault diagnosis using an optimization deep belief network
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
 
-### 9. Interpolating Subdivision for meshes with arbitrary topology
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: within 2 undirected hop(s) of query seeds.
+### 9. A novel bearing fault diagnosis model integrated permutation entropy, ensemble empirical mode decomposition and optimized SVM
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
 
-### 10. Automatic generation of triangular irregular networks using greedy cuts
-Why: High semantic match to query intent (hardware_system). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: within 2 undirected hop(s) of query seeds.
+### 10. Deep normalized convolutional neural network for imbalanced fault classification of machinery and its understanding via visualization
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
 
 
 ## Topic separation
 
-### Hardware Accelerated Tessellation
+### Attention Mechanism Transformer
 
-- **Smooth spline surfaces over irregular meshes**
-- **Functional optimization for fair surface design**
-- **Dynamic parallax occlusion mapping with approximate soft shadows**
-- **Building surfaces of evolution: The Weaving Wall**
-- **Direct manipulation of free-form deformations**
-- **Phong normal interpolation revisited**
-- **Simple constrained deformations for geometric modeling and interactive design**
-- **Estimating the tensor of curvature of a surface from a polyhedral approximation**
-- _... 16 more in this topic_
+- **A novel time–frequency Transformer based on self–attention mechanism and its application in fault diagnosis of rolling bearings**
+- **Intelligent fault diagnosis method of planetary gearboxes based on convolution neural network and discrete wavelet transform**
+- **Understanding and improving deep learning-based rolling bearing fault diagnosis with attention mechanism**
+- **Multiple-Order Graphical Deep Extreme Learning Machine for Unsupervised Fault Diagnosis of Rolling Bearing**
+- **A novel deep autoencoder feature learning method for rotating machinery fault diagnosis**
+- **Bearing fault diagnosis with auto-encoder extreme learning machine: A comparative study**
+- **An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale**
+- **Rolling bearing fault diagnosis using an optimization deep belief network**
+- _... 1 more in this topic_
 
-### Hardware Accelerated Tessellation (1)
+### Attention Mechanism Transformer (1)
 
-- **Dynamic View-Dependent Simplification for Polygonal Models**
-- **Curved PN triangles**
-- **Generic Adaptive Mesh Refinement**
-- **<i>Metro</i>: Measuring Error on Simplified Surfaces**
-- **Deformable curve and surface finite-elements for free-form shape design**
-- **Constructive shell representations for freeform surfaces and solids**
-- **Local surface interpolation with Bézier patches: errata and improvements**
-- **Optimizing triangle strips for fast rendering**
-- _... 16 more in this topic_
+- **A novel optimized SVM classification algorithm with multi-domain feature and its application to fault diagnosis of rolling bearing**
+- **Multisensor signal denoising based on matching synchrosqueezing wavelet transform for mechanical fault condition assessment**
+- **Attention Is All You Need**
+- **Long Short-Term Memory**
+- **A Survey of Fault Diagnosis and Fault-Tolerant Techniques—Part I: Fault Diagnosis With Model-Based and Signal-Based Approaches**
+- **Visualizing Data using t-SNE**
+- **Motor fault diagnosis using attention mechanism and improved adaboost driven by multi-sensor information**
+- **Gaussian Error Linear Units (GELUs)**
+- _... 1 more in this topic_
 
-### Surfaces Hardware Accelerated
+### Transformer Attention Mechanism
 
-- **Continuous Distance-Dependent Level of Detail for Rendering Heightmaps**
-- **Rapid evaluation of Catmull-Clark subdivision surfaces**
-- **Recursively generated B-spline surfaces on arbitrary topological meshes**
-- **Smooth Subdivision Surfaces Based on Triangles**
-- **A signal processing approach to fair surface design**
-- **Variational surface modeling**
-- **The clipmap**
-- **Multiscale compression of digital terrain data to meet real-time rendering rate constraints**
-- _... 16 more in this topic_
+- **Deep normalized convolutional neural network for imbalanced fault classification of machinery and its understanding via visualization**
+- **Dropout: a simple way to prevent neural networks from overfitting**
+- **Synchrosqueezed wavelet transforms: An empirical mode decomposition-like tool**
+- **A Novel Fault Diagnosis Approach for Rolling Bearing Based on High-Order Synchrosqueezing Transform and Detrended Fluctuation Analysis**
+- **Visual Transformers: Token-based Image Representation and Processing for Computer Vision**
+- **Rolling element bearing defect detection using the generalized synchrosqueezing transform guided by time–frequency ridge enhancement**
+- **Fault diagnosis of rolling bearings with recurrent neural network-based autoencoders**
+- **Model-based fault diagnosis in technical processes**
+- _... 1 more in this topic_
 
-### Tessellation Subdivision Hardware
+### Transformer Attention Mechanism (1)
 
-- **Adaptive Hardware-accelerated Terrain Tessellation**
-- **Approximating subdivision surfaces with Gregory patches for hardware tessellation**
-- **Geometry clipmaps**
-- **Displaced subdivision surfaces**
-- **Phong Tessellation**
-- **Interpolatory sqrt(3)-Subdivision.**
-- **A realtime GPU subdivision kernel**
-- **A butterfly subdivision scheme for surface interpolation with tension control**
-- _... 16 more in this topic_
+- **A roller bearing fault diagnosis method based on EMD energy entropy and ANN**
+- **Gear Fault Diagnosis Based on Kurtosis Criterion VMD and SOM Neural Network**
+- **Conformer: Convolution-augmented Transformer for Speech Recognition**
+- **Sequential Fault Diagnosis Based on LSTM Neural Network**
+- **Application of fuzzy C-means method and classification model of optimized K-nearest neighbor for fault diagnosis of bearing**
+- **Cubic convolution interpolation for digital image processing**
+- **Remaining Useful Life Estimation Under Multiple Operating Conditions via Deep Subdomain Adaptation**
+- **Fault diagnosis of rolling bearing of wind turbines based on the Variational Mode Decomposition and Deep Convolutional Neural Networks**
+- _... 1 more in this topic_
 
 ## Reference coverage
 
-- **83** of **96** papers include reference metadata in this export.
+- **35** of **36** papers include reference metadata in this export.
 - Per-paper reference counts (top 15 by importance):
-  - **Adaptive Hardware-accelerated Terrain Tessellation**: 7 references
-  - **Approximating subdivision surfaces with Gregory patches for hardware tessellatio**: 25 references
-  - **Geometry clipmaps**: 42 references
-  - **Displaced subdivision surfaces**: 39 references
-  - **Phong Tessellation**: 15 references
-  - **Interpolatory sqrt(3)-Subdivision.**: 7 references
-  - **A realtime GPU subdivision kernel**: 38 references
-  - **A butterfly subdivision scheme for surface interpolation with tension control**: 16 references
-  - **Interpolating Subdivision for meshes with arbitrary topology**: 20 references
-  - **Automatic generation of triangular irregular networks using greedy cuts**: 25 references
-  - **An algorithm for polygon subdivision based on vertex normals**: 12 references
-  - **Terrain rendering in frostbite using procedural shader splatting**: 4 references
-  - **Multiresolution analysis of arbitrary meshes**: 32 references
-  - **ROAMing terrain: Real-time Optimally Adapting Meshes**: 25 references
-  - **Real-time creased approximate subdivision surfaces**: 17 references
+  - **A novel time–frequency Transformer based on self–attention mechanism and its app**: 64 references
+  - **Intelligent fault diagnosis method of planetary gearboxes based on convolution n**: 54 references
+  - **Understanding and improving deep learning-based rolling bearing fault diagnosis **: 81 references
+  - **Multiple-Order Graphical Deep Extreme Learning Machine for Unsupervised Fault Di**: 32 references
+  - **A novel deep autoencoder feature learning method for rotating machinery fault di**: 36 references
+  - **Bearing fault diagnosis with auto-encoder extreme learning machine: A comparativ**: 26 references
+  - **An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale**: 53 references
+  - **Rolling bearing fault diagnosis using an optimization deep belief network**: 35 references
+  - **A novel bearing fault diagnosis model integrated permutation entropy, ensemble e**: 63 references
+  - **Deep normalized convolutional neural network for imbalanced fault classification**: 38 references
+  - **Dropout: a simple way to prevent neural networks from overfitting**: 36 references
+  - **Synchrosqueezed wavelet transforms: An empirical mode decomposition-like tool**: 30 references
+  - **A Novel Fault Diagnosis Approach for Rolling Bearing Based on High-Order Synchro**: 41 references
+  - **Visual Transformers: Token-based Image Representation and Processing for Compute**: 49 references
+  - **Rolling element bearing defect detection using the generalized synchrosqueezing **: 34 references
 
 ## Foundational papers
 
 ### Highly ranked in this graph
 
-- **Approximating subdivision surfaces with Gregory patches for hardware tessellation** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
-- **Approximating Catmull-Clark subdivision surfaces with bicubic patches** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
-- **A signal processing approach to fair surface design** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
-- **Curved PN triangles** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
-- **GPU smoothing of quad meshes** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
-- **Real-time creased approximate subdivision surfaces** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
-- **A realtime GPU subdivision kernel** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **A novel time–frequency Transformer based on self–attention mechanism and its application in fault diagnosis of rolling bearings** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Remaining Useful Life Estimation Under Multiple Operating Conditions via Deep Subdomain Adaptation** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Understanding and improving deep learning-based rolling bearing fault diagnosis with attention mechanism** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Deep normalized convolutional neural network for imbalanced fault classification of machinery and its understanding via visualization** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **A Novel Fault Diagnosis Approach for Rolling Bearing Based on High-Order Synchrosqueezing Transform and Detrended Fluctuation Analysis** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **A novel deep autoencoder feature learning method for rotating machinery fault diagnosis** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Intelligent fault diagnosis method of planetary gearboxes based on convolution neural network and discrete wavelet transform** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Imbalanced Fault Diagnosis of Rolling Bearing Using Enhanced Generative Adversarial Networks** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Multisensor signal denoising based on matching synchrosqueezing wavelet transform for mechanical fault condition assessment** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
 
 ## Missing link candidates (foundational PII literature)
 
@@ -128,49 +130,29 @@ _None above threshold._
 
 ### Publication years
 
-- 1972: 1
-- 1974: 1
-- 1975: 1
-- 1976: 1
-- 1977: 1
-- 1978: 2
-- 1979: 1
-- 1983: 3
-- 1985: 1
-- 1986: 1
-- 1987: 3
-- 1988: 1
-- 1989: 2
-- 1990: 3
-- 1991: 3
-- 1992: 8
-- 1993: 3
-- 1994: 7
-- 1995: 5
-- 1996: 8
-- 1997: 3
-- 1998: 3
-- 2000: 5
-- 2001: 1
-- 2002: 8
-- 2003: 1
-- 2004: 2
+- 1981: 1
+- 1997: 1
+- 2000: 1
 - 2005: 1
-- 2006: 3
-- 2007: 3
-- 2008: 5
-- 2009: 3
-- 2011: 1
-- 2012: 1
-- unknown: 3
+- 2008: 1
+- 2009: 1
+- 2010: 1
+- 2014: 2
+- 2015: 5
+- 2016: 2
+- 2017: 2
+- 2018: 5
+- 2019: 3
+- 2020: 8
+- 2021: 2
+- unknown: 1
 
 ### Domains
 
-- cs: 50
-- physics: 45
-- unknown: 3
-- biomedical: 1
+- physics: 25
+- cs: 11
+- unknown: 1
 
 
 ## Citation structure
-- **255** medium/high-confidence links; **346** exploratory or low-confidence links (detail omitted in reading mode).
+- **27** medium/high-confidence links; **62** exploratory or low-confidence links (detail omitted in reading mode).

@@ -85,6 +85,56 @@ LITE_CSS = """
 """
 
 
+def _resolve_seed_title(seed: dict[str, Any], pmap: dict[str, dict[str, Any]]) -> str:
+    """Match ``requested_seeds`` entry to a graph node to show human-readable title."""
+    prov = (seed.get("provider") or "").strip().lower()
+    sid = (seed.get("id") or "").strip()
+    if not sid:
+        return ""
+    keys: list[str] = []
+    if prov == "openalex":
+        keys.append(f"openalex:{sid}")
+    elif prov == "arxiv":
+        try:
+            from .ingestion import normalize_arxiv_list_id
+        except ImportError:
+            from srg.ingestion import normalize_arxiv_list_id  # type: ignore[no-redef]
+
+        aid = normalize_arxiv_list_id(sid)
+        keys.append(f"arxiv:{aid.lower()}")
+    elif prov in ("doi", "crossref"):
+        keys.append(f"crossref:{sid.lower()}")
+        keys.append(f"doi:{sid.lower()}")
+    for k in keys:
+        p = pmap.get(k)
+        if p and (p.get("title") or "").strip():
+            return str(p.get("title")).strip()
+    if prov == "openalex":
+        for p in pmap.values():
+            oid = str(p.get("openalex_id") or "").strip()
+            if oid and oid.lower() == sid.lower():
+                return str(p.get("title") or "").strip() or sid
+    if prov == "arxiv":
+        want = normalize_arxiv_list_id(aid).strip().lower()
+        if want:
+            for p in pmap.values():
+                ttl = (p.get("title") or "").strip()
+                if not ttl:
+                    continue
+                rid = str(p.get("arxiv_id") or "").strip()
+                if rid and normalize_arxiv_list_id(rid).lower() == want:
+                    return ttl
+                pid = str(p.get("id") or "")
+                if pid.lower().startswith("arxiv:"):
+                    rid2 = normalize_arxiv_list_id(pid.split(":", 1)[-1]).lower()
+                    if rid2 == want:
+                        return ttl
+                doi = str(p.get("doi") or "").lower()
+                if want in doi and ("arxiv" in doi or "48550" in doi):
+                    return ttl
+    return ""
+
+
 def _fmt_domain(domain: str | None) -> str:
     d = (domain or "").strip() or "general"
     return d.replace("_", " ").title()
@@ -372,6 +422,27 @@ def run_srg_lite_ui() -> None:
 
     papers = [p for p in (payload.get("papers") or []) if not p.get("graph_noise")]
     pmap = _paper_map(payload["papers"])
+    ar_notes = rq.get("anchor_resolution_notes") or []
+    req_seeds = payload.get("requested_seeds") or []
+    if ar_notes or req_seeds:
+        with st.expander("Anchor seeds (retrieval diagnostics)", expanded=False):
+            st.caption(
+                "These are the works used to anchor citation expansion. If the list looks off-topic, "
+                "results will follow that neighborhood — try a DOI, arXiv id, or a narrower phrase."
+            )
+            for line in ar_notes:
+                st.markdown(f"- {line}")
+            if req_seeds:
+                st.markdown("**Resolved seed list**")
+                for i, s in enumerate(req_seeds, start=1):
+                    prov = (s.get("provider") or "?").strip()
+                    sid = (s.get("id") or "").strip()
+                    origin = (s.get("origin") or "").strip()
+                    ttl = _resolve_seed_title(s, pmap)
+                    if ttl:
+                        st.markdown(f"{i}. `{prov}:{sid}` · _{origin}_ — **{ttl[:140]}{'…' if len(ttl) > 140 else ''}**")
+                    else:
+                        st.markdown(f"{i}. `{prov}:{sid}` · _{origin}_ — _(title not in current graph slice)_")
     branches = _research_branches_for_lite(papers, payload)
     foundational = [
         p for p in papers if p.get("is_foundational_hub") and p.get("foundational_eligible", True)

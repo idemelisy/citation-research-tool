@@ -6,6 +6,7 @@ from datetime import datetime
 import difflib
 import math
 import re
+import unicodedata
 from typing import Any
 
 import requests
@@ -47,6 +48,22 @@ from .schema import Author, FeedbackEvent, PaperRecord, Provenance
 # Expand: ingest a wide reference pool, rank with ACCE-style relations, show only top-N in the UI graph slice.
 EXPAND_CANDIDATE_POOL_MAX = 200
 EXPAND_DISPLAY_TOP_N = 50
+
+# OpenAlex /works search hits in unrelated applied fields (bearings, vibration, etc.) when the user
+# asked a general ML query that also has canonical arXiv anchors — skip those hits as seeds.
+_OPENALEX_INDUSTRIAL_APPLIED_RE = re.compile(
+    r"\b(fault diagnosis|rolling bearing|bearing fault|vibration diagnos|condition monitor(?:ing)?|"
+    r"gearbox|motor current|defect detection|rotating machinery|prognostic health)\b",
+    re.I,
+)
+
+
+def _titles_match_score(a: str, b: str) -> float:
+    """Conservative [0,1] similarity for title alignment (cross-provider OpenAlex fallback)."""
+    if not (a or "").strip() or not (b or "").strip():
+        return 0.0
+    return float(difflib.SequenceMatcher(None, a.strip().lower(), b.strip().lower()).ratio())
+
 
 # Alignment lexicon for semantic ranking / IR-noise suppression (multi-stage semantic–graph phase).
 _SEMANTIC_ALIGNMENT_LEXICON: tuple[str, ...] = (
@@ -239,6 +256,7 @@ class SRGApplicationService:
             "arxiv": "arxiv",
         }
         self._cached_pii_concept_tail: str | None = None
+        self._last_seed_selection_notes: list[str] = []
 
     def fetch_metadata_for_seed(self, provider: str, seed_id: str) -> dict[str, Any] | None:
         """Return API title + authors for a DOI / arXiv / OpenAlex id (PDF verification path; never uses PDF text)."""
@@ -357,12 +375,19 @@ class SRGApplicationService:
         return list(dict.fromkeys(v for v in variants if v))
 
     @staticmethod
+    def _normalize_user_query_for_canonical_match(q: str) -> str:
+        t = (q or "").strip()
+        t = unicodedata.normalize("NFKC", t)
+        t = re.sub(r"[\u200b-\u200d\ufeff]", "", t)
+        return t.lower()
+
+    @staticmethod
     def _canonical_anchor_seeds_for_query(q: str) -> list[dict[str, Any]]:
         """
         Phase 1 — anchor papers for known acronyms / canonical lines of work (arXiv ids).
         Keeps retrieval anchored before citation-neighborhood expansion.
         """
-        low = (q or "").lower()
+        low = SRGApplicationService._normalize_user_query_for_canonical_match(q)
         words = set(re.findall(r"[a-z0-9]+", low))
         out: list[dict[str, Any]] = []
 
@@ -403,6 +428,23 @@ class SRGApplicationService:
             add("2106.09685")
         if "bert" in words and len(low.split()) <= 8:
             add("1810.04805")
+        # Modern GNN line (Kipf & Welling GCN, GraphSAGE, GAT, GIN) — OpenAlex title search often lands on 2000s precursors only.
+        if (
+            "graph neural network" in low
+            or re.search(r"\bgnn\b", low)
+            or "graph convolutional" in low
+            or "graphsage" in low.replace("-", "").replace(" ", "")
+            or "graph attention network" in low
+            or "graph attention" in low
+            or "graph isomorph" in low
+            or (
+                "graph" in words
+                and "neural" in words
+                and ("network" in words or "networks" in words)
+            )
+        ):
+            for aid in ("1609.02907", "1706.02216", "1710.10903", "1810.00826"):
+                add(aid)
 
         dedup: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -412,6 +454,33 @@ class SRGApplicationService:
                 seen.add(k)
                 dedup.append(s)
         return dedup
+
+    @staticmethod
+    def _openalex_title_query_fit_ratio(query: str, title: str) -> float:
+        """Loose string similarity between user query and OpenAlex work title (for anchor gating)."""
+        qn = " ".join((query or "").lower().split())
+        tn = " ".join((title or "").lower().split())[:520]
+        if not qn or not tn:
+            return 0.0
+        return float(difflib.SequenceMatcher(None, qn, tn).ratio())
+
+    @staticmethod
+    def _reject_openalex_seed_given_canonicals(
+        query: str, title: str, *, has_canonical_anchors: bool
+    ) -> tuple[bool, str]:
+        """
+        When canonical arXiv anchors exist for this query, reject obvious off-domain OpenAlex hits
+        so they are not promoted as equal ``api_search`` anchors before canonical literature.
+        """
+        if not has_canonical_anchors or not (title or "").strip():
+            return False, ""
+        t = (title or "").strip()
+        if _OPENALEX_INDUSTRIAL_APPLIED_RE.search(t):
+            return True, "applied/industrial topic mismatch vs canonical ML anchors"
+        r = SRGApplicationService._openalex_title_query_fit_ratio(query, t)
+        if r < 0.26:
+            return True, f"weak title–query match (ratio={r:.2f})"
+        return False, ""
 
     def _openalex_seed_from_work(self, work: dict[str, Any]) -> dict[str, Any] | None:
         oid = (work.get("id") or "").rsplit("/", maxsplit=1)[-1]
@@ -684,7 +753,7 @@ class SRGApplicationService:
         """
         Broaden mode: if root seeds are sparse, add both outgoing references and incoming citers.
         """
-        if len(seeds) >= 20:
+        if len(seeds) >= 96:
             return seeds
         oa = OpenAlexClient()
         out = list(seeds)
@@ -937,6 +1006,7 @@ class SRGApplicationService:
     ) -> list[dict[str, Any]]:
         q = query.strip()
         diagnostics: list[str] = []
+        self._last_seed_selection_notes = []
         if not q:
             return []
         ql = q.lower()
@@ -963,11 +1033,11 @@ class SRGApplicationService:
         if backend == "arxiv":
             try:
                 seeds: list[dict[str, Any]] = []
+                seeds.extend(self._canonical_anchor_seeds_for_query(q))
                 for qq in self._expanded_query_variants(q):
                     sq = arxiv_search_query_from_user_text(qq)
                     hits = ArXivClient().search(sq, max_results=max(1, min(arxiv_search_max_results, 50)))
                     seeds.extend({"provider": "arxiv", "id": h["id"], "origin": "api_search"} for h in hits if h.get("id"))
-                seeds.extend(self._canonical_anchor_seeds_for_query(q))
                 if self._is_pii_concept_query(q):
                     seeds.extend(self._openalex_pii_concept_seed_hits(diagnostics))
                 dedup: list[dict[str, Any]] = []
@@ -982,23 +1052,50 @@ class SRGApplicationService:
             except requests.RequestException:
                 return []
         try:
-            seeds: list[dict[str, Any]] = []
+            canonical_seeds = self._canonical_anchor_seeds_for_query(q)
+            has_canonical = bool(canonical_seeds)
+            oa_seeds: list[dict[str, Any]] = []
             oa = OpenAlexClient()
             oa_cap = 20
-            per_variant = 8
             for qq in self._expanded_query_variants(q):
-                if len(seeds) >= oa_cap:
+                if len(oa_seeds) >= oa_cap:
                     break
-                result = oa.search_by_title(qq)
+                result = oa.search_by_title(qq, per_page=5)
                 rows = result.get("results", []) or []
-                for top in rows[:per_variant]:
-                    if len(seeds) >= oa_cap:
+                accepted_any = False
+                for top in rows:
+                    if len(oa_seeds) >= oa_cap:
                         break
                     oid = (top.get("id") or "").rsplit("/", maxsplit=1)[-1]
+                    if not oid:
+                        continue
+                    title_disp = (top.get("display_name") or top.get("title") or "").strip()
+                    bad, reason = self._reject_openalex_seed_given_canonicals(
+                        q, title_disp, has_canonical_anchors=has_canonical
+                    )
+                    if bad:
+                        self._last_seed_selection_notes.append(
+                            f"OpenAlex seed skipped ({reason}): {title_disp[:92]}{'…' if len(title_disp) > 92 else ''}"
+                        )
+                        continue
+                    oa_seeds.append({"provider": "openalex", "id": oid, "origin": "api_search"})
+                    accepted_any = True
+                if not accepted_any and rows:
+                    top = rows[0]
+                    oid = (top.get("id") or "").rsplit("/", maxsplit=1)[-1]
                     if oid:
-                        seeds.append({"provider": "openalex", "id": oid, "origin": "api_search"})
-            seeds.extend(self._canonical_anchor_seeds_for_query(q))
-            # PII / privacy phrases rarely match /works?search=…; still run the concept-based probe.
+                        oa_seeds.append({"provider": "openalex", "id": oid, "origin": "api_search"})
+                        if has_canonical:
+                            t0 = (top.get("display_name") or top.get("title") or "").strip()
+                            self._last_seed_selection_notes.append(
+                                "OpenAlex: all ranked hits failed canonical-aware filters; kept search rank-1 as fallback "
+                                f"({t0[:80]}{'…' if len(t0) > 80 else ''})."
+                            )
+                        else:
+                            self._last_seed_selection_notes.append(
+                                "OpenAlex: using search rank-1 (no canonical anchor list for this query)."
+                            )
+            seeds = list(canonical_seeds) + oa_seeds
             if self._is_pii_concept_query(q):
                 seeds.extend(self._openalex_pii_concept_seed_hits(diagnostics))
             if not seeds:
@@ -1011,6 +1108,20 @@ class SRGApplicationService:
                     continue
                 seen.add(kid)
                 deduped.append(s)
+            if self._last_seed_selection_notes:
+                self._last_seed_selection_notes.insert(
+                    0,
+                    f"Anchor resolution: {len(canonical_seeds)} canonical arXiv seed(s) first, "
+                    f"then {len(oa_seeds)} OpenAlex work(s) (up to 5 hits per query variant for disambiguation).",
+                )
+            gnn_pack_ids = frozenset({"1609.02907", "1706.02216", "1710.10903", "1810.00826"})
+            canon_arxiv_ids = [s["id"] for s in canonical_seeds if (s.get("provider") or "").lower() == "arxiv"]
+            gnn_active = any(x in gnn_pack_ids for x in canon_arxiv_ids)
+            ca_txt = ", ".join(canon_arxiv_ids) if canon_arxiv_ids else "(none)"
+            self._last_seed_selection_notes.append(
+                f"GNN anchor rule: {'matched (Kipf/GraphSAGE/GAT/GIN pack prepended)' if gnn_active else 'did not match'}; "
+                f"canonical arXiv ids for this query: {ca_txt}."
+            )
             return [enrich_seed(s) for s in self._broaden_seed_pool(deduped, diagnostics)]
         except requests.RequestException:
             return []
@@ -1111,6 +1222,7 @@ class SRGApplicationService:
             floor = int(opts.get("two_hop_budget_floor", 200) or 200)
             two_hop_budget = max(two_hop_budget, max(30, min(300, floor)))
         diagnostics: list[str] = []
+        diagnostics.extend(list(getattr(self, "_last_seed_selection_notes", []) or []))
         skipped_ids: list[str] = []
         if len(effective_seeds) < 12:
             concept_threshold = max(0.15, concept_threshold - 0.15)
@@ -1726,6 +1838,7 @@ class SRGApplicationService:
         n_gedges = len(graph_json.get("edges") or [])
         n_api_seeds = sum(1 for s in effective_seeds if (s.get("origin") or "") == "api_search")
         rq_warnings: list[str] = []
+        anchor_notes = list(getattr(self, "_last_seed_selection_notes", []) or [])
         if lite_retrieval_repair or lite_field_aware:
             if n_gnodes >= 2 and n_gedges < 2:
                 rq_warnings.append(
@@ -1780,6 +1893,7 @@ class SRGApplicationService:
             }
         retrieval_quality: dict[str, Any] = {
             "warnings": rq_warnings,
+            "anchor_resolution_notes": anchor_notes,
             "node_count": n_gnodes,
             "edge_count": n_gedges,
             "api_search_seed_count": n_api_seeds,

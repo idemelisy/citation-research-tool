@@ -1,0 +1,647 @@
+# SRG Lite reading list
+
+Generated: 2026-05-11T14:08:44.633917
+Query: transformer attention mechanism
+
+
+## Reading list
+
+### 1. A novel time–frequency Transformer based on self–attention mechanism and its application in fault diagnosis of rolling bearings
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: within 0 undirected hop(s) of query seeds. - Topic overlap with your query: transformer, attention, mecha…
+
+### 2. Intelligent fault diagnosis method of planetary gearboxes based on convolution neural network and discrete wavelet transform
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 3. Understanding and improving deep learning-based rolling bearing fault diagnosis with attention mechanism
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: attention, mechanism.
+
+### 4. Multiple-Order Graphical Deep Extreme Learning Machine for Unsupervised Fault Diagnosis of Rolling Bearing
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 5. A novel deep autoencoder feature learning method for rotating machinery fault diagnosis
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 6. Bearing fault diagnosis with auto-encoder extreme learning machine: A comparative study
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 7. An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: transformer.
+
+### 8. Rolling bearing fault diagnosis using an optimization deep belief network
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 9. A novel bearing fault diagnosis model integrated permutation entropy, ensemble empirical mode decomposition and optimized SVM
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 10. Deep normalized convolutional neural network for imbalanced fault classification of machinery and its understanding via visualization
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+
+## Topic separation
+
+### Attention Mechanism Transformer
+
+- **A novel time–frequency Transformer based on self–attention mechanism and its application in fault diagnosis of rolling bearings**
+- **Intelligent fault diagnosis method of planetary gearboxes based on convolution neural network and discrete wavelet transform**
+- **Understanding and improving deep learning-based rolling bearing fault diagnosis with attention mechanism**
+- **Multiple-Order Graphical Deep Extreme Learning Machine for Unsupervised Fault Diagnosis of Rolling Bearing**
+- **A novel deep autoencoder feature learning method for rotating machinery fault diagnosis**
+- **Bearing fault diagnosis with auto-encoder extreme learning machine: A comparative study**
+- **An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale**
+- **Rolling bearing fault diagnosis using an optimization deep belief network**
+- _... 1 more in this topic_
+
+### Attention Mechanism Transformer (1)
+
+- **A novel optimized SVM classification algorithm with multi-domain feature and its application to fault diagnosis of rolling bearing**
+- **Multisensor signal denoising based on matching synchrosqueezing wavelet transform for mechanical fault condition assessment**
+- **Attention Is All You Need**
+- **Long Short-Term Memory**
+- **A Survey of Fault Diagnosis and Fault-Tolerant Techniques—Part I: Fault Diagnosis With Model-Based and Signal-Based Approaches**
+- **Visualizing Data using t-SNE**
+- **Motor fault diagnosis using attention mechanism and improved adaboost driven by multi-sensor information**
+- **Gaussian Error Linear Units (GELUs)**
+- _... 1 more in this topic_
+
+### Transformer Attention Mechanism
+
+- **Deep normalized convolutional neural network for imbalanced fault classification of machinery and its understanding via visualization**
+- **Dropout: a simple way to prevent neural networks from overfitting**
+- **Synchrosqueezed wavelet transforms: An empirical mode decomposition-like tool**
+- **A Novel Fault Diagnosis Approach for Rolling Bearing Based on High-Order Synchrosqueezing Transform and Detrended Fluctuation Analysis**
+- **Visual Transformers: Token-based Image Representation and Processing for Computer Vision**
+- **Rolling element bearing defect detection using the generalized synchrosqueezing transform guided by time–frequency ridge enhancement**
+- **Fault diagnosis of rolling bearings with recurrent neural network-based autoencoders**
+- **Model-based fault diagnosis in technical processes**
+- _... 1 more in this topic_
+
+### Transformer Attention Mechanism (1)
+
+- **A roller bearing fault diagnosis method based on EMD energy entropy and ANN**
+- **Gear Fault Diagnosis Based on Kurtosis Criterion VMD and SOM Neural Network**
+- **Conformer: Convolution-augmented Transformer for Speech Recognition**
+- **Sequential Fault Diagnosis Based on LSTM Neural Network**
+- **Application of fuzzy C-means method and classification model of optimized K-nearest neighbor for fault diagnosis of bearing**
+- **Cubic convolution interpolation for digital image processing**
+- **Remaining Useful Life Estimation Under Multiple Operating Conditions via Deep Subdomain Adaptation**
+- **Fault diagnosis of rolling bearing of wind turbines based on the Variational Mode Decomposition and Deep Convolutional Neural Networks**
+- _... 1 more in this topic_
+
+## Reference coverage
+
+- **35** of **36** papers include reference metadata in this export.
+- Per-paper reference counts (top 15 by importance):
+  - **A novel time–frequency Transformer based on self–attention mechanism and its app**: 64 references
+  - **Intelligent fault diagnosis method of planetary gearboxes based on convolution n**: 54 references
+  - **Understanding and improving deep learning-based rolling bearing fault diagnosis **: 81 references
+  - **Multiple-Order Graphical Deep Extreme Learning Machine for Unsupervised Fault Di**: 32 references
+  - **A novel deep autoencoder feature learning method for rotating machinery fault di**: 36 references
+  - **Bearing fault diagnosis with auto-encoder extreme learning machine: A comparativ**: 26 references
+  - **An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale**: 53 references
+  - **Rolling bearing fault diagnosis using an optimization deep belief network**: 35 references
+  - **A novel bearing fault diagnosis model integrated permutation entropy, ensemble e**: 63 references
+  - **Deep normalized convolutional neural network for imbalanced fault classification**: 38 references
+  - **Dropout: a simple way to prevent neural networks from overfitting**: 36 references
+  - **Synchrosqueezed wavelet transforms: An empirical mode decomposition-like tool**: 30 references
+  - **A Novel Fault Diagnosis Approach for Rolling Bearing Based on High-Order Synchro**: 41 references
+  - **Visual Transformers: Token-based Image Representation and Processing for Compute**: 49 references
+  - **Rolling element bearing defect detection using the generalized synchrosqueezing **: 34 references
+
+## Foundational papers
+
+### Highly ranked in this graph
+
+- **A novel time–frequency Transformer based on self–attention mechanism and its application in fault diagnosis of rolling bearings** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Remaining Useful Life Estimation Under Multiple Operating Conditions via Deep Subdomain Adaptation** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Understanding and improving deep learning-based rolling bearing fault diagnosis with attention mechanism** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Deep normalized convolutional neural network for imbalanced fault classification of machinery and its understanding via visualization** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **A Novel Fault Diagnosis Approach for Rolling Bearing Based on High-Order Synchrosqueezing Transform and Detrended Fluctuation Analysis** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **A novel deep autoencoder feature learning method for rotating machinery fault diagnosis** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Intelligent fault diagnosis method of planetary gearboxes based on convolution neural network and discrete wavelet transform** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Imbalanced Fault Diagnosis of Rolling Bearing Using Enhanced Generative Adversarial Networks** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Multisensor signal denoising based on matching synchrosqueezing wavelet transform for mechanical fault condition assessment** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+
+## Missing link candidates (foundational PII literature)
+
+_None above threshold._
+
+
+## Trends (domain-aware)
+
+### Publication years
+
+- 1981: 1
+- 1997: 1
+- 2000: 1
+- 2005: 1
+- 2008: 1
+- 2009: 1
+- 2010: 1
+- 2014: 2
+- 2015: 5
+- 2016: 2
+- 2017: 2
+- 2018: 5
+- 2019: 3
+- 2020: 8
+- 2021: 2
+- unknown: 1
+
+### Domains
+
+- physics: 25
+- cs: 11
+- unknown: 1
+
+
+## Citation structure
+- **27** medium/high-confidence links; **62** exploratory or low-confidence links (detail omitted in reading mode).
+
+Anchor seeds (retrieval diagnostics)
+
+These are the works used to anchor citation expansion. If the list looks off-topic, results will follow that neighborhood — try a DOI, arXiv id, or a narrower phrase.
+
+Resolved seed list
+
+openalex:W4200049650 · api_search — A novel time–frequency Transformer based on self–attention mechanism and its application in fault diagnosis of rolling bearings
+arxiv:1706.03762 · api_search — (title not in current graph slice)
+openalex:W1581242383 · discovered_2hop — A Field Guide to Dynamical Recurrent Networks
+openalex:W1597576211 · discovered_2hop — A Survey of Fault Diagnosis and Fault-Tolerant Techniques—Part I: Fault Diagnosis With Model-Based and Signal-Based Approaches
+openalex:W1967352108 · discovered_2hop — A novel bearing fault diagnosis model integrated permutation entropy, ensemble empirical mode decomposition and optimized SVM
+openalex:W1975514583 · discovered_2hop — A roller bearing fault diagnosis method based on EMD energy entropy and ANN
+openalex:W2064675550 · discovered_2hop — Long Short-Term Memory
+openalex:W2090218979 · discovered_2hop — Synchrosqueezed wavelet transforms: An empirical mode decomposition-like tool
+openalex:W2095705004 · discovered_2hop — Dropout: a simple way to prevent neural networks from overfitting
+openalex:W2115954437 · discovered_2hop — Rolling element bearing defect detection using the generalized synchrosqueezing transform guided by time–frequency ridge enhancement
+openalex:W2119566395 · discovered_2hop — Model-based fault diagnosis in technical processes
+openalex:W2151060079 · discovered_2hop — Fault Diagnosis of Bearing Based on KPCA and KNN Method
+openalex:W2157494358 · discovered_2hop — Cubic convolution interpolation for digital image processing
+openalex:W2187089797 · discovered_2hop — Visualizing Data using t-SNE
+openalex:W2258884143 · discovered_2hop — Rolling bearing fault diagnosis using an optimization deep belief network
+openalex:W2493554679 · discovered_2hop — Application of fuzzy C-means method and classification model of optimized K-nearest neighbor for fault diagnosis of bearing
+openalex:W2548257861 · discovered_2hop — Bearing fault diagnosis with auto-encoder extreme learning machine: A comparative study
+openalex:W2601590138 · discovered_2hop — A novel deep autoencoder feature learning method for rotating machinery fault diagnosis
+openalex:W2781541244 · discovered_2hop — Multisensor signal denoising based on matching synchrosqueezing wavelet transform for mechanical fault condition assessment
+openalex:W2794081072 · discovered_2hop — Sequential Fault Diagnosis Based on LSTM Neural Network
+openalex:W2794869810 · discovered_2hop — Deep normalized convolutional neural network for imbalanced fault classification of machinery and its understanding via visualization
+openalex:W2801396593 · discovered_2hop — Fault diagnosis of rolling bearings with recurrent neural network-based autoencoders
+openalex:W2809350318 · discovered_2hop — A novel optimized SVM classification algorithm with multi-domain feature and its application to fault diagnosis of rolling bearing
+openalex:W2899663614 · discovered_2hop — Gaussian Error Linear Units (GELUs)
+openalex:W2907007702 · discovered_2hop — Intelligent fault diagnosis method of planetary gearboxes based on convolution neural network and discrete wavelet transform
+openalex:W2925209208 · discovered_2hop — Understanding and improving deep learning-based rolling bearing fault diagnosis with attention mechanism
+openalex:W3000241683 · discovered_2hop — A Novel Fault Diagnosis Approach for Rolling Bearing Based on High-Order Synchrosqueezing Transform and Detrended Fluctuation Analysis
+openalex:W3033210410 · discovered_2hop — Visual Transformers: Token-based Image Representation and Processing for Computer Vision
+openalex:W3041218800 · discovered_2hop — Fault diagnosis of rolling bearing of wind turbines based on the Variational Mode Decomposition and Deep Convolutional Neural Networks
+openalex:W3093676973 · discovered_2hop — Imbalanced Fault Diagnosis of Rolling Bearing Using Enhanced Generative Adversarial Networks
+openalex:W3094502228 · discovered_2hop — An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale
+openalex:W3097777922 · discovered_2hop — Conformer: Convolution-augmented Transformer for Speech Recognition
+openalex:W3106650808 · discovered_2hop — Motor fault diagnosis using attention mechanism and improved adaboost driven by multi-sensor information
+openalex:W3110992226 · discovered_2hop — Multiple-Order Graphical Deep Extreme Learning Machine for Unsupervised Fault Diagnosis of Rolling Bearing
+openalex:W3153465022 · discovered_2hop — Pending metadata: W3153465022
+openalex:W3160064936 · discovered_2hop — Remaining Useful Life Estimation Under Multiple Operating Conditions via Deep Subdomain Adaptation
+openalex:W3208230679 · discovered_2hop — Gear Fault Diagnosis Based on Kurtosis Criterion VMD and SOM Neural Network
+
+
+
+2-These are the works used to anchor citation expansion. If the list looks off-topic, results will follow that neighborhood — try a DOI, arXiv id, or a narrower phrase.
+
+Resolved seed list
+
+openalex:W2116341502 · api_search — The Graph Neural Network Model
+openalex:W14071851 · discovered_2hop — Diffusion kernels on graphs and other discrete structures
+openalex:W26772505 · discovered_2hop — Lecture Notes in Artificial Intelligence
+openalex:W39337161 · discovered_2hop — Real and complex analysis, 3rd ed.
+openalex:W80531862 · discovered_2hop — Markov Chains and Finite Stochastic Matrices
+openalex:W136734405 · discovered_2hop — Logical and Relational Learning: From ILP to MRDM (Cognitive Technologies)
+openalex:W205223620 · discovered_2hop — A Supervised Self-Organizing Map for Structured Data
+openalex:W1479807131 · discovered_2hop — Semi-Supervised Learning
+openalex:W1493471018 · discovered_2hop — Inductive learning in symbolic domains using structure-driven recurrent neural networks
+openalex:W1501856433 · discovered_2hop — A new model for learning in graph domains
+openalex:W1511160855 · discovered_2hop — Diffusion Kernels on Graphs and Other Discrete Input Spaces
+openalex:W1516216032 · discovered_2hop — Recursive Neural Networks Applied to Discourse Representation Theory
+openalex:W1528332570 · discovered_2hop — Learning to Create Customized Authority Lists
+openalex:W1528547644 · discovered_2hop — Feature Construction with Version Spaces for Biochemical Applications
+openalex:W1530239534 · discovered_2hop — Kronecker Products and Matrix Calculus: With Applications
+openalex:W1530383550 · discovered_2hop — Structural Pattern Recognition
+openalex:W1531743498 · discovered_2hop — FOIL: A midterm report
+openalex:W1534444802 · discovered_2hop — Graph Neural Networks for Object Localization
+openalex:W1537486610 · discovered_2hop — Using logical decision trees for clustering
+openalex:W1554663460 · discovered_2hop — Neural networks for pattern recognition
+openalex:W1554807050 · discovered_2hop — Graph matching applications in pattern recognition and image processing
+openalex:W1566941664 · discovered_2hop — An Introduction to Metric Spaces and Fixed Point Theory
+openalex:W1567193480 · discovered_2hop — Tutorial Introduction to Graph Transformation: A Software Engineering Perspective
+openalex:W1576532873 · discovered_2hop — Neural methods for non-standard data
+openalex:W1585529040 · discovered_2hop — Introduction to Statistical Relational Learning
+openalex:W1594563152 · discovered_2hop — Real and Complex Analysis.
+openalex:W1596788205 · discovered_2hop — Gradient based learning methods
+openalex:W1597646615 · discovered_2hop — Adaptive processing of sequences and data structures : International Summer School on Neural Networks "E.R. Caianiello", Vietri sul Mare, Sa…
+openalex:W1597757028 · discovered_2hop — Logo recognition by recursive neural networks
+openalex:W1634186644 · discovered_2hop — Pattern Recognition Using Finite-Iteration Cellular Systems
+openalex:W1746077795 · discovered_2hop — Learning User Profiles in NAUTILUS
+openalex:W1785889609 · discovered_2hop — Comparative Evaluation of Approaches to Propositionalization
+openalex:W1835509607 · discovered_2hop — Marginalized kernels between labeled graphs
+openalex:W1860880244 · discovered_2hop — Introduction to Statistical Relational Learning (Adaptive Computation and Machine Learning)
+openalex:W1864786932 · discovered_2hop — Supervised relevance neural gas and unified maximum separability analysis for classification of mass spectrometric data
+openalex:W1881179843 · discovered_2hop — A learning rule for asynchronous perceptrons with feedback in a combinatorial environment
+# SRG Lite reading list
+
+Generated: 2026-05-11T14:10:02.397854
+Query: graph neural networks
+
+
+## Reading list
+
+### 1. The Graph Neural Network Model
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: within 0 undirected hop(s) of query seeds. - Topic overlap with your query: graph, …
+
+### 2. A Supervised Self-Organizing Map for Structured Data
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 3. Diffusion Kernels on Graphs and Other Discrete Input Spaces
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: g…
+
+### 4. Recursive Neural Networks Applied to Discourse Representation Theory
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: n…
+
+### 5. Graph Neural Networks for Object Localization
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: g…
+
+### 6. A new model for learning in graph domains
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: g…
+
+### 7. Gradient based learning methods
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 8. Neural methods for non-standard data
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: n…
+
+### 9. Marginalized kernels between labeled graphs
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: g…
+
+### 10. Semi-Supervised Learning
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+
+## Topic separation
+
+### Graph Neural Networks
+
+- **Neural networks for pattern recognition**
+- **An Introduction to Metric Spaces and Fixed Point Theory**
+- **Graph matching applications in pattern recognition and image processing**
+- **Adaptive processing of sequences and data structures : International Summer School on Neural Networks "E.R. Caianiello", Vietri sul Mare, Salerno, Italy, September 6-13, 1997, tutorial lectures**
+- **Tutorial Introduction to Graph Transformation: A Software Engineering Perspective**
+- **Lecture Notes in Artificial Intelligence**
+- **Introduction to Statistical Relational Learning (Adaptive Computation and Machine Learning)**
+- **Structural Pattern Recognition**
+- _... 1 more in this topic_
+
+### Graph Neural Networks (1)
+
+- **Learning User Profiles in NAUTILUS**
+- **Logical and Relational Learning: From ILP to MRDM (Cognitive Technologies)**
+- **Kronecker Products and Matrix Calculus: With Applications**
+- **Learning to Create Customized Authority Lists**
+- **Markov Chains and Finite Stochastic Matrices**
+- **Using logical decision trees for clustering**
+- **Real and Complex Analysis.**
+- **Introduction to Statistical Relational Learning**
+- _... 1 more in this topic_
+
+### Neural Graph Networks
+
+- **The Graph Neural Network Model**
+- **A Supervised Self-Organizing Map for Structured Data**
+- **Diffusion Kernels on Graphs and Other Discrete Input Spaces**
+- **Recursive Neural Networks Applied to Discourse Representation Theory**
+- **Graph Neural Networks for Object Localization**
+- **A new model for learning in graph domains**
+- **Gradient based learning methods**
+- **Neural methods for non-standard data**
+- _... 1 more in this topic_
+
+### Neural Networks Graph
+
+- **Semi-Supervised Learning**
+- **Logo recognition by recursive neural networks**
+- **Inductive learning in symbolic domains using structure-driven recurrent neural networks**
+- **Comparative Evaluation of Approaches to Propositionalization**
+- **Diffusion kernels on graphs and other discrete structures**
+- **Supervised relevance neural gas and unified maximum separability analysis for classification of mass spectrometric data**
+- **A learning rule for asynchronous perceptrons with feedback in a combinatorial environment**
+- **Feature Construction with Version Spaces for Biochemical Applications**
+- _... 1 more in this topic_
+
+## Reference coverage
+
+- **23** of **36** papers include reference metadata in this export.
+- Per-paper reference counts (top 15 by importance):
+  - **The Graph Neural Network Model**: 123 references
+  - **A Supervised Self-Organizing Map for Structured Data**: 6 references
+  - **Diffusion Kernels on Graphs and Other Discrete Input Spaces**: 19 references
+  - **Recursive Neural Networks Applied to Discourse Representation Theory**: 10 references
+  - **Graph Neural Networks for Object Localization**: 20 references
+  - **A new model for learning in graph domains**: 13 references
+  - **Gradient based learning methods**: 27 references
+  - **Neural methods for non-standard data**: 98 references
+  - **Marginalized kernels between labeled graphs**: 31 references
+  - **Semi-Supervised Learning**: 475 references
+  - **Logo recognition by recursive neural networks**: 20 references
+  - **Inductive learning in symbolic domains using structure-driven recurrent neural n**: 18 references
+  - **Comparative Evaluation of Approaches to Propositionalization**: 34 references
+  - **Diffusion kernels on graphs and other discrete structures**: 18 references
+  - **Supervised relevance neural gas and unified maximum separability analysis for cl**: 23 references
+
+## Foundational papers
+
+### Highly ranked in this graph
+
+- **The Graph Neural Network Model** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Graph Neural Networks for Object Localization** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **A new model for learning in graph domains** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Neural methods for non-standard data** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Supervised relevance neural gas and unified maximum separability analysis for classification of mass spectrometric data** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Marginalized kernels between labeled graphs** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Semi-Supervised Learning** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Diffusion Kernels on Graphs and Other Discrete Input Spaces** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **An Introduction to Metric Spaces and Fixed Point Theory** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Logo recognition by recursive neural networks** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+
+## Missing link candidates (foundational PII literature)
+
+_None above threshold._
+
+
+## Trends (domain-aware)
+
+### Publication years
+
+- 1977: 1
+- 1981: 2
+- 1987: 2
+- 1990: 1
+- 1993: 1
+- 1994: 1
+- 1996: 1
+- 1997: 1
+- 1998: 3
+- 1999: 1
+- 2000: 2
+- 2001: 3
+- 2002: 4
+- 2003: 2
+- 2004: 2
+- 2005: 2
+- 2006: 3
+- 2007: 2
+- 2008: 2
+
+### Domains
+
+- cs: 33
+- physics: 2
+- biomedical: 1
+
+
+## Citation structure
+- **17** medium/high-confidence links; **49** exploratory or low-confidence links (detail omitted in reading mode).
+
+
+3-# SRG Lite reading list
+
+Generated: 2026-05-11T14:12:13.341234
+Query: RLHF reward modeling
+
+
+## Reading list
+
+### 1. Learning to summarize from human feedback
+Why: High semantic match to query intent (method_lookup). - Moderately recent work relative to the current literature. - Anchor overlap: within 0 undirected hop(s) of query seeds.
+
+### 2. Strengthening Multimodal Large Language Model with Bootstrapped Preference Optimization
+Why: High semantic match to query intent (method_lookup). - Recent publication window (strong recency signal). - Anchor overlap: within 0 undirected hop(s) of query seeds.
+
+### 3. An Actor-Critic Algorithm for Sequence Prediction
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 4. A Deep Reinforced Model for Abstractive Summarization
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 5. A bird's-eye view on coherence, and a worm's-eye view on cohesion.
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 6. The Natural Language Decathlon: Multitask Learning as Question Answering
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 7. Sequence Level Training with Recurrent Neural Networks
+Why: High semantic match to query intent (method_lookup). - Older publication; kept only when semantic and anchor signals justify inclusion. - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 8. RLHF-V: Towards Trustworthy MLLMs via Behavior Alignment from Fine-Grained Correctional Human Feedback
+Why: High semantic match to query intent (method_lookup). - Recent publication window (strong recency signal). - Anchor overlap: direct citation tie to a query seed in this map. - Topic overlap with your query: rlhf.
+
+### 9. Mitigating Object Hallucinations in Large Vision-Language Models through Visual Contrastive Decoding
+Why: High semantic match to query intent (method_lookup). - Recent publication window (strong recency signal). - Anchor overlap: direct citation tie to a query seed in this map.
+
+### 10. Direct Preference Optimization: Your Language Model is Secretly a Reward Model
+Why: High semantic match to query intent (method_lookup). - Recent publication window (strong recency signal). - Anchor overlap: within 0 undirected hop(s) of query seeds. - Topic overlap with your query: reward.
+
+
+## Topic separation
+
+### Reward Modeling Rlhf
+
+- **Semi-supervised Sequence Learning**
+- **Abstractive Sentence Summarization with Attentive Recurrent Neural Networks**
+- **Scalable agent alignment via reward modeling: a research direction**
+- **ShareGPT4V: Improving Large Multi-modal Models with Better Captions**
+- **Controllable Neural Story Generation via Reinforcement Learning.**
+- **Reinforcement Learning for Bandit Neural Machine Translation with Simulated Human Feedback**
+- **DetGPT: Detect What You Need via Reasoning**
+- **Evaluating Object Hallucination in Large Vision-Language Models**
+- _... 10 more in this topic_
+
+### Reward Rlhf Modeling
+
+- **Learning to summarize from human feedback**
+- **Strengthening Multimodal Large Language Model with Bootstrapped Preference Optimization**
+- **An Actor-Critic Algorithm for Sequence Prediction**
+- **A Deep Reinforced Model for Abstractive Summarization**
+- **A bird's-eye view on coherence, and a worm's-eye view on cohesion.**
+- **The Natural Language Decathlon: Multitask Learning as Question Answering**
+- **Sequence Level Training with Recurrent Neural Networks**
+- **RLHF-V: Towards Trustworthy MLLMs via Behavior Alignment from Fine-Grained Correctional Human Feedback**
+- _... 10 more in this topic_
+
+### Rlhf Reward Modeling
+
+- **Sequence Tutor: Conservative Fine-Tuning of Sequence Generation Models with KL-control**
+- **Automatic evaluation of machine translation quality using longest common subsequence and skip-bigram statistics**
+- **Diagnosing Non-Intermittent Anomalies in Reinforcement Learning Policy Executions (Short Paper)**
+- **Google's Neural Machine Translation System: Bridging the Gap between Human and Machine Translation**
+- **Accurately interpreting clickthrough data as implicit feedback**
+- **Learning to rank for information retrieval**
+- **Optimizing search engines using clickthrough data**
+- **InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning**
+- _... 10 more in this topic_
+
+### Rlhf Reward Modeling (1)
+
+- **Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond**
+- **Arithmetic Control of LLMs for Diverse User Preferences: Directional Preference Alignment with Multi-Objective Rewards**
+- **G-LLaVA: Solving Geometric Problem with Multi-Modal Large Language Model**
+- **LMFlow: An Extensible Toolkit for Finetuning and Inference of Large Foundation Models**
+- **MetaMath: Bootstrap Your Own Mathematical Questions for Large Language Models**
+- **Silkie: Preference Distillation for Large Visual Language Models**
+- **Mathematical Analysis of Machine Learning Algorithms**
+- **Self-Guided Noise-Free Data Generation for Efficient Zero-Shot Learning**
+- _... 8 more in this topic_
+
+## Reference coverage
+
+- **44** of **70** papers include reference metadata in this export.
+- Per-paper reference counts (top 15 by importance):
+  - **Learning to summarize from human feedback**: 71 references
+  - **Strengthening Multimodal Large Language Model with Bootstrapped Preference Optim**: 34 references
+  - **An Actor-Critic Algorithm for Sequence Prediction**: 40 references
+  - **A Deep Reinforced Model for Abstractive Summarization**: 39 references
+  - **A bird's-eye view on coherence, and a worm's-eye view on cohesion.**: 55 references
+  - **The Natural Language Decathlon: Multitask Learning as Question Answering**: 106 references
+  - **Sequence Level Training with Recurrent Neural Networks**: 29 references
+  - **RLHF-V: Towards Trustworthy MLLMs via Behavior Alignment from Fine-Grained Corre**: 76 references
+  - **Mitigating Object Hallucinations in Large Vision-Language Models through Visual **: 78 references
+  - **Direct Preference Optimization: Your Language Model is Secretly a Reward Model**: 0 references
+  - **ZeroGen: Efficient Zero-shot Learning via Dataset Generation**: 66 references
+  - **A Neural Attention Model for Abstractive Sentence Summarization**: 24 references
+  - **Bias and Fairness in Large Language Models: A Survey**: 325 references
+  - **Abstract Text Summarization with a Convolutional Seq2seq Model**: 35 references
+  - **Improving a Neural Semantic Parser by Counterfactual Learning from Human Bandit **: 26 references
+
+## Foundational papers
+
+### Highly ranked in this graph
+
+- **Strengthening Multimodal Large Language Model with Bootstrapped Preference Optimization** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+- **Learning to summarize from human feedback** — _sqrt(degree) × recency + metadata completeness (hub-resistant)_
+
+## Missing link candidates (foundational PII literature)
+
+_None above threshold._
+
+
+## Trends (domain-aware)
+
+### Publication years
+
+- 1952: 1
+- 1989: 1
+- 1994: 1
+- 2002: 1
+- 2003: 1
+- 2004: 1
+- 2005: 1
+- 2010: 2
+- 2014: 1
+- 2015: 4
+- 2016: 5
+- 2017: 6
+- 2018: 7
+- 2019: 3
+- 2020: 1
+- 2022: 4
+- 2023: 15
+- 2024: 14
+- 2025: 1
+- unknown: 8
+
+### Domains
+
+- cs: 67
+- unknown: 8
+- biomedical: 2
+- physics: 1
+
+
+## Citation structure
+- **97** medium/high-confidence links; **124** exploratory or low-confidence links (detail omitted in reading mode).
+Resolved seed list
+
+openalex:W4414272362 · api_search — Optimizing RLHF Reward Models with Fairness Constraints
+openalex:W4378771755 · api_search — Direct Preference Optimization: Your Language Model is Secretly a Reward Model
+openalex:W4226278401 · api_search — Training language models to follow instructions with human feedback
+openalex:W4403726885 · api_search — Strengthening Multimodal Large Language Model with Bootstrapped Preference Optimization
+arxiv:2305.18290 · api_search — Direct Preference Optimization: Your Language Model is Secretly a Reward Model
+arxiv:2404.19733 · api_search — Iterative Reasoning Preference Optimization
+arxiv:2203.02155 · api_search — Training language models to follow instructions with human feedback
+arxiv:2212.08073 · api_search — Constitutional AI: Harmlessness from AI Feedback
+arxiv:2403.07691 · api_search — ORPO: Monolithic Preference Optimization without Reference Model
+arxiv:2009.01325 · api_search — Learning to summarize from human feedback
+openalex:W4399528455 · discovered_2hop — Bias and Fairness in Large Language Models: A Survey
+openalex:W4404781048 · discovered_2hop — Margin Matching Preference Optimization: Enhanced Model Alignment with Granular Feedback
+openalex:W2013784666 · discovered_2hop — RANK ANALYSIS OF INCOMPLETE BLOCK DESIGNS
+openalex:W2962735233 · discovered_2hop — Pending metadata: W2962735233
+openalex:W4281790610 · discovered_2hop — Self-Guided Noise-Free Data Generation for Efficient Zero-Shot Learning
+openalex:W4366196653 · discovered_2hop — RAFT: Reward rAnked FineTuning for Generative Foundation Model Alignment
+openalex:W4367628410 · discovered_2hop — LLaMA-Adapter V2: Parameter-Efficient Visual Instruction Model
+openalex:W4376312115 · discovered_2hop — InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning
+openalex:W4379259189 · discovered_2hop — LLaVA-Med: Training a Large Language-and-Vision Assistant for Biomedicine in One Day
+openalex:W4382766522 · discovered_2hop — LLaVAR: Enhanced Visual Instruction Tuning for Text-Rich Image Understanding
+openalex:W4384817778 · discovered_2hop — Mathematical Analysis of Machine Learning Algorithms
+openalex:W4385573325 · discovered_2hop — ZeroGen: Efficient Zero-shot Learning via Dataset Generation
+openalex:W4385645323 · discovered_2hop — MM-Vet: Evaluating Large Multimodal Models for Integrated Capabilities
+openalex:W4386185600 · discovered_2hop — Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond
+openalex:W4386978002 · discovered_2hop — MetaMath: Bootstrap Your Own Mathematical Questions for Large Language Models
+openalex:W4387947626 · discovered_2hop — Woodpecker: Hallucination Correction for Multimodal Large Language Models
+openalex:W4389519620 · discovered_2hop — DetGPT: Detect What You Need via Reasoning
+openalex:W4389523832 · discovered_2hop — Evaluating Object Hallucination in Large Vision-Language Models
+openalex:W4389977164 · discovered_2hop — G-LLaVA: Solving Geometric Problem with Multi-Modal Large Language Model
+openalex:W4389983382 · discovered_2hop — Silkie: Preference Distillation for Large Visual Language Models
+openalex:W4401042360 · discovered_2hop — LMFlow: An Extensible Toolkit for Finetuning and Inference of Large Foundation Models
+openalex:W4402670859 · discovered_2hop — Aligning Large Multimodal Models with Factually Augmented RLHF
+openalex:W4402671571 · discovered_2hop — Arithmetic Control of LLMs for Diverse User Preferences: Directional Preference Alignment with Multi-Objective Rewards
+openalex:W4402727405 · discovered_2hop — RLHF-V: Towards Trustworthy MLLMs via Behavior Alignment from Fine-Grained Correctional Human Feedback
+openalex:W4402753774 · discovered_2hop — Mitigating Object Hallucinations in Large Vision-Language Models through Visual Contrastive Decoding
+openalex:W4402781286 · discovered_2hop — PerceptionGPT: Effectively Fusing Visual Perception Into LLM
+openalex:W4404575065 · discovered_2hop — ShareGPT4V: Improving Large Multi-modal Models with Better Captions
+openalex:W4404782342 · discovered_2hop — The Instinctive Bias: Spurious Images lead to Illusion in MLLMs
+openalex:W4404783010 · discovered_2hop — MLLM-Protector: Ensuring MLLM’s Safety without Hurting Performance
+openalex:W6600384961 · discovered_2hop — Pending metadata: W6600384961
+openalex:W6607367167 · discovered_2hop — Pending metadata: W6607367167
+openalex:W6679942958 · discovered_2hop — Pending metadata: W6679942958
+openalex:W6777574746 · discovered_2hop — Pending metadata: W6777574746
+openalex:W6778883912 · discovered_2hop — Pending metadata: W6778883912
+openalex:W6782465632 · discovered_2hop — Pending metadata: W6782465632
+openalex:W1522301498 · discovered_2hop — Adam: A Method for Stochastic Optimization
+openalex:W1533861849 · discovered_2hop — Understanding the difficulty of training deep feedforward neural networks
+openalex:W1544827683 · discovered_2hop — Teaching Machines to Read and Comprehend
+openalex:W1843891098 · discovered_2hop — A Neural Attention Model for Abstractive Sentence Summarization
+openalex:W1973435495 · discovered_2hop — Learning to rank for information retrieval
+openalex:W2012318340 · discovered_2hop — Optimum polynomial retrieval functions based on the probability ranking principle
+openalex:W2020237802 · discovered_2hop — Automatic Combination of Multiple Ranked Retrieval Systems
+openalex:W2047221353 · discovered_2hop — Optimizing search engines using clickthrough data
+openalex:W2081265723 · discovered_2hop — Hedge Trimmer
+openalex:W2108325777 · discovered_2hop — Automatic evaluation of machine translation quality using longest common subsequence and skip-bigram statistics
+openalex:W2152314154 · discovered_2hop — Accurately interpreting clickthrough data as implicit feedback
+openalex:W2170973209 · discovered_2hop — Semi-supervised Sequence Learning
+openalex:W2176263492 · discovered_2hop — Sequence Level Training with Recurrent Neural Networks
+openalex:W2322584079 · discovered_2hop — Pending metadata: W2322584079
+openalex:W2467173223 · discovered_2hop — Abstractive Sentence Summarization with Attentive Recurrent Neural Networks
+openalex:W2487501366 · discovered_2hop — An Actor-Critic Algorithm for Sequence Prediction
+openalex:W2512971201 · discovered_2hop — Deep Neural Networks for YouTube Recommendations
+openalex:W2525778437 · discovered_2hop — Google's Neural Machine Translation System: Bridging the Gap between Human and Machine Translation
+openalex:W2564034046 · discovered_2hop — Tuning Recurrent Neural Networks with Reinforcement Learning
+openalex:W2591984255 · discovered_2hop — Sequence Tutor: Conservative Fine-Tuning of Sequence Generation Models with KL-control
+openalex:W2612675303 · discovered_2hop — A Deep Reinforced Model for Abstractive Summarization
+openalex:W2736601468 · discovered_2hop — Diagnosing Non-Intermittent Anomalies in Reinforcement Learning Policy Executions (Short Paper)
+openalex:W2737114849 · discovered_2hop — Reinforcement Learning for Bandit Neural Machine Translation with Simulated Human Feedback
+openalex:W2741672218 · discovered_2hop — The limits of automatic summarisation according to ROUGE
+openalex:W2760781482 · discovered_2hop — TL;DR: Mining Reddit to Learn Automatic Summarization
+openalex:W2798047776 · discovered_2hop — Can Neural Machine Translation be Improved with User Feedback?
+openalex:W2798299685 · discovered_2hop — Improving a Neural Semantic Parser by Counterfactual Learning from Human Bandit Feedback
+openalex:W2809324505 · discovered_2hop — The Natural Language Decathlon: Multitask Learning as Question Answering
+openalex:W2892472836 · discovered_2hop — Controllable Neural Story Generation via Reinforcement Learning.
+openalex:W2896930824 · discovered_2hop — Supervising strong learners by amplifying weak experts
+openalex:W2899485151 · discovered_2hop — A bird's-eye view on coherence, and a worm's-eye view on cohesion.
+openalex:W2901707424 · discovered_2hop — Scalable agent alignment via reward modeling: a research direction
+openalex:W2910458567 · discovered_2hop — Learning from Dialogue after Deployment: Feed Yourself, Chatbot!
+openalex:W2938704169 · discovered_2hop — The Curious Case of Neural Text Degeneration
+openalex:W2941610736 · discovered_2hop — Abstract Text Summarization with a Convolutional Seq2seq Model
