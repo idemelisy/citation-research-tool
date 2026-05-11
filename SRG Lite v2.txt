@@ -1,0 +1,474 @@
+SRG Lite v2.1 — Architecture Specification (Paper-Style)
+1. Overview
+
+SRG Lite v2.1 is a hybrid retrieval–ranking framework that combines:
+
+graph-based importance estimation,
+semantic relevance modeling,
+canonicality-aware scoring,
+and intent-conditioned score fusion.
+
+The system is designed for query-adaptive ranking of scholarly and structured knowledge graphs, where importance is not static but conditioned on user intent.
+
+2. System Architecture
+
+The pipeline consists of four sequential stages:
+
+Query
+  ↓
+(1) Intent Classification Layer
+  ↓
+(2) Candidate Retrieval + Graph Expansion
+  ↓
+(3) Multi-signal Scoring Layer
+      ├─ Semantic Scoring
+      ├─ Graph Scoring
+      ├─ Canonicality Scoring
+  ↓
+(4) Intent-conditioned Fusion Layer
+  ↓
+Final Ranked List
+3. Stage I — Intent Classification Layer
+Objective
+
+Infer query intent to adapt ranking strategy dynamically.
+
+Output
+
+A structured query intent:
+
+QueryIntent ∈ {
+  DEFINITION,
+  COMPARISON,
+  METHOD_LOOKUP,
+  SURVEY,
+  EXPLORATORY
+}
+Method
+
+A hybrid heuristic classifier:
+
+lexical pattern detection (definition/comparison cues)
+method-name detection (e.g., “Direct Preference Optimization”)
+entity-like query detection
+embedding similarity fallback (optional extension in v2.1)
+Design Note
+
+Intent classification determines fusion weights downstream and retrieval expansion depth.
+
+4. Stage II — Candidate Retrieval + Graph Expansion
+Objective
+
+Construct a candidate subgraph of relevant documents.
+
+Inputs
+query embedding
+detected entities / method names
+graph adjacency structure
+Process
+Retrieve top-K semantic neighbors
+Expand via graph edges (bounded BFS / weighted traversal)
+Attach metadata (citations, references, domain tags)
+Output
+
+Candidate set:
+
+C = {node_1, node_2, ..., node_n}
+
+Each node contains:
+
+semantic features
+graph connectivity features
+metadata (citations, references, timestamps)
+5. Stage III — Multi-signal Scoring Layer
+
+Each candidate node is assigned three independent scores.
+
+5.1 Semantic Relevance Score
+
+Measures embedding alignment:
+
+S_semantic ∈ [0,1]
+
+Computed via:
+
+cosine similarity(query_embedding, node_embedding)
+optional contextual adjustment for query intent
+5.2 Graph Importance Score
+
+Captures structural importance in the knowledge graph.
+
+Composed of:
+
+PageRank normalization
+edge confidence weighting
+local neighborhood coherence
+S_graph = normalize(PR(node)) + edge_quality + context_score
+
+All components are normalized to:
+
+S_graph ∈ [0,1]
+5.3 Canonicality Score
+
+Estimates how “canonical” or authoritative a node is in its domain.
+
+S_canonical ∈ [0,1]
+
+Signals:
+
+title–query overlap
+citation count (OpenAlex or equivalent)
+survey / review bias detection
+structural prominence in reference graph
+6. Stage IV — Intent-Conditioned Fusion Layer
+Objective
+
+Combine signals into a final ranking score conditioned on query intent.
+
+6.1 Fusion Function
+
+Final score:
+
+S_final = w1(I)·S_semantic + w2(I)·S_graph + w3(I)·S_canonical
+
+Where:
+
+w(I) = intent-conditioned weight vector
+6.2 Weight Configurations
+(A) Definition / Method Queries
+w = (0.4, 0.2, 0.4)
+
+Emphasizes canonicality (authoritative definitions).
+
+(B) Survey / Literature Overview Queries
+w = (0.4, 0.4, 0.2)
+
+Balances graph structure and semantic coverage.
+
+(C) Exploratory Queries
+w = (0.6, 0.3, 0.1)
+
+Prioritizes semantic proximity and discovery.
+
+Design Principle
+
+Fusion is explicitly interpretable and deterministic, avoiding black-box ranking collapse.
+
+7. Ranking Output Layer
+Objective
+
+Produce final ordered list:
+
+R = sort(C, key = S_final)
+
+Each output node includes:
+
+S_semantic
+S_graph
+S_canonical
+S_final
+pagerank_norm
+edge_quality_norm
+intent metadata
+8. System Diagnostics Layer (Observability)
+
+SRG Lite v2.1 exposes internal diagnostics:
+
+Retrieval Quality Metrics
+candidate coverage
+graph expansion density
+semantic dispersion
+Ranking Diagnostics
+score distribution per signal
+fusion contribution breakdown
+intent classification confidence
+Graph Health Metrics
+edge confidence distribution
+node centrality skew
+reference completeness ratio
+9. API Integration Layer
+Mode Switch
+lite_v2_ranking: boolean
+
+If enabled:
+
+replaces static blending pipeline
+activates full intent-conditioned fusion
+disables legacy heuristic ranking
+Node Augmentation
+
+Each node is enriched with:
+
+semantic_score
+graph_score
+canonicality_score
+pagerank_norm
+edge_quality_norm
+final_score
+10. System Design Properties
+10.1 Modularity
+
+Each scoring function is independent and replaceable.
+
+10.2 Interpretability
+
+All ranking contributions are explicitly exposed.
+
+10.3 Determinism
+
+No stochastic re-ranking in inference path.
+
+10.4 Extensibility
+
+Supports future plug-in modules:
+
+learned intent classifier
+learned fusion weights
+calibration layer (Platt/isotonic)
+11. Known Limitations (Acknowledged in Design)
+Intent classification is heuristic (non-learned in v2.1)
+Fusion weights are static (no online optimization)
+Graph density may introduce popularity bias
+No explicit calibration of score distributions across domains
+12. Summary
+
+SRG Lite v2.1 is a multi-signal, intent-aware ranking architecture that integrates:
+
+semantic similarity
+graph structure importance
+canonical authority signals
+deterministic intent-conditioned fusion
+
+It is designed as a transparent alternative to end-to-end neural ranking models, prioritizing interpretability and modular evolution over black-box optimization.
+
+
+ — Intent-Aware Semantic Control Layer
+Motivation
+
+The current system successfully constructs citation-aware scholarly graphs and identifies structurally important papers through bibliographic coupling, citation connectivity, and graph-based ranking. However, evaluation revealed a recurring issue during retrieval for specialized technical queries such as “hardware accelerated tessellation.”
+
+Although the graph expansion process produces strongly connected citation structures, the final reading list may drift away from the original user intent. For example, computational geometry papers can expand into generic geometry hubs, scientific computing infrastructure papers, or even unrelated domains such as bioinformatics due to shared citation structures and high graph centrality.
+
+This phenomenon is referred to as semantic drift or topic drift.
+
+The core limitation of the current system is that graph relevance and semantic relevance are treated as equivalent, even though they optimize different objectives:
+
+Citation graphs optimize:
+connectivity
+influence
+structural importance
+shared references
+Users expect:
+topical relevance
+domain consistency
+intent preservation
+query-specific recommendations
+
+As a result, highly connected but semantically unrelated papers may dominate the ranking process.
+
+Objective
+
+The objective of this phase is to introduce an Intent-Aware Semantic Control Layer that continuously evaluates whether retrieved and expanded papers remain semantically aligned with the original query.
+
+This phase aims to improve:
+
+query relevance
+domain consistency
+retrieval precision
+semantic stability during graph expansion
+
+while preserving the strengths of the existing graph-based recommendation pipeline.
+
+Problem Definition
+
+The current ranking formulation primarily favors graph structure:
+
+Score(p)=α⋅GraphImportance+β⋅Connectivity+γ⋅Coupling
+
+This formulation is effective for discovering influential or highly connected papers, but insufficient for preserving semantic intent.
+
+The proposed phase introduces a hybrid semantic-graph ranking formulation:
+
+Score(p)=α⋅SemanticSimilarity+β⋅GraphImportance+γ⋅LocalConnectivity−δ⋅DriftPenalty
+
+where:
+
+SemanticSimilarity measures alignment between the query and the paper using embeddings or textual similarity.
+GraphImportance captures structural significance inside the citation graph.
+LocalConnectivity rewards papers strongly connected to semantically relevant neighbors.
+DriftPenalty suppresses semantically distant or overly generic graph expansions.
+Proposed Components
+1. Semantic Similarity Scoring
+
+A semantic similarity component will be introduced using title and abstract embeddings.
+
+For a given query and candidate paper:
+
+query embedding
+paper title embedding
+paper abstract embedding
+
+will be compared using cosine similarity.
+
+This allows the system to distinguish between:
+
+semantically relevant graphics papers
+unrelated but highly connected scientific infrastructure papers
+
+even if both appear in nearby graph neighborhoods.
+
+Potential embedding models include:
+
+SPECTER2
+SciBERT
+E5
+BGE
+Jina embeddings
+2. Expansion Distance Penalty
+
+Graph expansion naturally introduces topic drift as traversal moves farther from the initial seed papers.
+
+To reduce this effect, a distance-aware penalty will be introduced:
+
+DriftPenalty=λ⋅hopDistance
+
+This penalizes papers reached through long citation chains and prioritizes locally relevant neighborhoods.
+
+3. Domain Consistency Filtering
+
+The system will infer a lightweight domain classification from the user query (e.g., graphics, NLP, databases, bioinformatics).
+
+During graph expansion:
+
+papers belonging to unrelated domains receive lower weights
+domain-consistent venues and keywords receive higher weights
+
+This prevents unrelated scientific hubs from dominating the retrieval process.
+
+4. Hub Suppression
+
+Highly cited generic papers may appear frequently across unrelated domains.
+
+To mitigate this, global citation hubs will be normalized using degree-aware suppression:
+
+AdjustedImportance=
+log(1+GlobalDegree)
+Importance
+	​
+
+
+This reduces the influence of universally connected infrastructure papers while preserving locally important domain papers.
+
+Updated Retrieval Pipeline
+
+The proposed retrieval architecture becomes:
+
+User Query
+    ↓
+Semantic Retrieval
+    ↓
+Seed Paper Selection
+    ↓
+Citation Graph Expansion
+    ↓
+Candidate Paper Set
+    ↓
+Semantic Re-ranking Layer
+    ↓
+Final Reading List
+
+The newly introduced semantic re-ranking layer acts as a continuous intent-preservation mechanism throughout retrieval.
+
+Expected Outcomes
+
+The proposed phase is expected to:
+
+reduce semantic drift during graph expansion
+improve domain-specific retrieval quality
+suppress unrelated citation hubs
+increase precision for specialized technical queries
+produce more coherent reading lists
+maintain the strengths of citation-aware scholarly exploration
+
+Ultimately, this phase transforms the system from a primarily graph-centric retrieval engine into a hybrid semantic-graph scholarly recommendation framework.
+
+Phase for the new fix:
+— Intent Verification and Semantic Alignment Layer
+
+Although the Semantic Control Layer introduced in SRG Lite v2 significantly reduced graph-induced topic drift through hub suppression, local semantic coherence, drift penalties, and domain-aware adjustments, experimental results revealed an additional limitation in graph-augmented scholarly retrieval.
+
+In highly specialized technical queries, structurally central papers may still dominate the ranking despite only being loosely aligned with the actual query intent. This occurs because citation structure, bibliographic coupling, and neighborhood coherence can amplify papers that are globally influential within a broader research area, even when they are not specifically relevant to the user’s target concept.
+
+For example, in the query:
+
+“hardware accelerated tessellation”
+
+the system successfully retrieved several directly relevant GPU tessellation papers. However, highly connected subdivision-surface and geometric modeling papers still appeared near the top of the ranking due to strong structural connectivity and semantic neighborhood overlap. While these papers are academically related to tessellation research, many are not specifically focused on hardware acceleration, GPU tessellation pipelines, or real-time rendering systems.
+
+This behavior highlights a common issue in graph-enhanced retrieval systems:
+
+structural relevance may overpower query-specific semantic intent.
+
+To address this limitation, the next phase introduces an Intent Verification and Semantic Alignment Layer positioned after graph fusion and semantic control.
+
+The goal of this layer is to explicitly verify whether a retrieved paper is semantically aligned with the core technical intent of the query rather than merely being structurally adjacent within the citation graph.
+
+The updated retrieval pipeline becomes:
+
+Query
+  ↓
+Initial Retrieval
+  ↓
+Graph Expansion
+  ↓
+Fusion Ranking
+  ↓
+Semantic Control Layer
+  ↓
+Intent Verification Layer
+  ↓
+Final Ranking
+
+Unlike previous stages that rely primarily on lexical overlap, graph topology, bibliographic coupling, or lightweight semantic heuristics, this layer focuses on deep semantic consistency between:
+
+the user query,
+the paper title,
+abstract content,
+and the paper’s inferred research intent.
+
+The proposed implementation introduces embedding-based semantic representations using scientific language models such as:
+
+SPECTER2,
+E5,
+SciBERT,
+or other domain-adapted embedding models.
+
+Each query and candidate paper is mapped into a shared semantic embedding space. Semantic alignment can then be estimated using cosine similarity:
+
+intent_score(q,p)=cos(E(q),E(p))
+
+where:
+
+E(q) represents the query embedding,
+E(p) represents the embedding of the paper title and abstract.
+
+The final retrieval score can then integrate semantic intent verification together with structural relevance:
+
+final_score=α⋅intent_similarity+β⋅graph_score+γ⋅local_coherence−δ⋅semantic_drift
+
+This phase aims to preserve the benefits of graph-based literature discovery while preventing structurally dominant but semantically diluted papers from overwhelming query-specific retrieval intent.
+
+More importantly, this extension transforms SRG Lite from a purely graph-enhanced retrieval system into an intent-aware scholarly retrieval framework capable of balancing:
+
+structural importance,
+semantic specificity,
+neighborhood coherence,
+and query intent preservation.
+
+The resulting research direction aligns with broader challenges in:
+
+GraphRAG systems,
+neural information retrieval,
+citation recommendation systems,
+and graph-augmented semantic search,
+where maintaining semantic fidelity during graph expansion remains an open problem.

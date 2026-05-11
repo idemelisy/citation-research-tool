@@ -57,9 +57,12 @@ LITE_DISCOVERY_OPTIONS: dict[str, Any] = {
     # Field coherence & canonicality — stabilize anchors, penalize distant drift, curate visible graph.
     "lite_coherence_stabilization": True,
     "lite_user_graph_relevance_floor": 0.14,
-    # SRG Lite v2 — intent + canonicality + adaptive fusion (replaces static 0.7/0.3 semantic–graph blend).
+    # SRG Lite v2 / v2.1 — intent fusion + semantic control (drift / domain / hubs); see semantic_control.py.
     "lite_v2_ranking": True,
     "lite_semantic_graph_ranking": False,
+    "lite_semantic_control": True,
+    # Intent verification + semantic alignment (embedding cosine if sentence-transformers installed).
+    "lite_intent_verification": True,
 }
 
 LITE_CSS = """
@@ -271,8 +274,8 @@ def run_srg_lite_ui() -> None:
     if not payload:
         st.markdown(
             '<p class="lite-hero">Enter a topic or paper id. Retrieval uses multiple anchors and citation expansion '
-            "(not a single semantic hit). SRG Lite v2 classifies query intent, scores canonicality (definition-level fit) "
-            "and a graph signal (PageRank + edge quality), then fuses them with intent-dependent weights.</p>",
+            "(not a single semantic hit). SRG Lite v2.1 adds semantic control (drift, domain, hubs) and an intent verification pass "
+            "(embedding cosine when optional deps are installed, else lexical fallback) to rescore against query-specific intent.</p>",
             unsafe_allow_html=True,
         )
         return
@@ -280,6 +283,22 @@ def run_srg_lite_ui() -> None:
     rq = payload.get("retrieval_quality") or {}
     for msg in rq.get("warnings") or []:
         st.warning(msg)
+    v21_rq = rq.get("v2_1_diagnostics") or {}
+    sc_rq = v21_rq.get("semantic_control") or {}
+    if sc_rq.get("enabled"):
+        doms = sc_rq.get("query_inferred_domains") or []
+        dom_txt = ", ".join(doms) if doms else "none inferred"
+        st.caption(
+            f"Semantic control (anti-drift): δ={sc_rq.get('semantic_control_drift_lambda')}, "
+            f"γ={sc_rq.get('semantic_control_local_gamma')}; inferred query domains: {dom_txt}."
+        )
+    iv_rq = v21_rq.get("intent_verification") or {}
+    if iv_rq.get("enabled") and iv_rq.get("backend"):
+        be = iv_rq.get("backend")
+        md = iv_rq.get("model") or "n/a"
+        st.caption(
+            f"Intent verification: backend={be}, model={md}; mean query–paper intent similarity ≈ {iv_rq.get('mean_intent_similarity', '—')}."
+        )
 
     papers = [p for p in (payload.get("papers") or []) if not p.get("graph_noise")]
     pmap = _paper_map(payload["papers"])
@@ -434,7 +453,7 @@ def run_srg_lite_ui() -> None:
         cs = paper.get("canonicality_score")
         if gs is not None:
             try:
-                meta_bits.append(f"Graph score (PR + edges): {float(gs):.2f}")
+                meta_bits.append(f"Graph score (hub-adjusted): {float(gs):.2f}")
             except (TypeError, ValueError):
                 pass
         if cs is not None:
@@ -442,6 +461,42 @@ def run_srg_lite_ui() -> None:
                 meta_bits.append(f"Canonicality: {float(cs):.2f}")
             except (TypeError, ValueError):
                 pass
+        ctxn = paper.get("context_score_norm")
+        if ctxn is not None:
+            try:
+                meta_bits.append(f"Neighborhood coherence: {float(ctxn):.2f}")
+            except (TypeError, ValueError):
+                pass
+        fs = paper.get("final_score")
+        if fs is not None:
+            try:
+                meta_bits.append(f"Final fused score: {float(fs):.4f}")
+            except (TypeError, ValueError):
+                pass
+        ah = paper.get("anchor_graph_hops")
+        if ah is not None and int(ah) < 98:
+            meta_bits.append(f"Hops from query anchors: {int(ah)}")
+        lsc = paper.get("local_semantic_connectivity")
+        if lsc is not None:
+            try:
+                meta_bits.append(f"Neighbor semantic coherence: {float(lsc):.2f}")
+            except (TypeError, ValueError):
+                pass
+        dpn = paper.get("semantic_drift_penalty_norm")
+        if dpn is not None and float(dpn) > 0:
+            try:
+                meta_bits.append(f"Drift penalty (norm): {float(dpn):.2f}")
+            except (TypeError, ValueError):
+                pass
+        isim = paper.get("intent_similarity")
+        if isim is not None:
+            try:
+                meta_bits.append(f"Intent similarity: {float(isim):.2f}")
+            except (TypeError, ValueError):
+                pass
+        ivb = paper.get("intent_verification_backend")
+        if ivb:
+            meta_bits.append(f"Intent backend: {ivb}")
         if meta_bits:
             st.caption(" · ".join(meta_bits))
 

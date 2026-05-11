@@ -19,6 +19,7 @@ from .intent_classifier import classify_query
 from .evaluation import QualityReport, build_quality_report
 from .feedback import FeedbackStore
 from .graph import CitationGraphBuilder, GraphSnapshot, SemanticMetrics
+from .intent_verification import apply_intent_verification_layer
 from .ingestion import (
     ArXivClient,
     CacheStore,
@@ -54,6 +55,16 @@ _SEMANTIC_ALIGNMENT_LEXICON: tuple[str, ...] = (
     "dpo",
 )
 
+from .ranking_diagnostics import lite_v21_observability_payload
+from .semantic_control import (
+    aggregate_semantic_control_diagnostics,
+    domain_consistency_multiplier,
+    hub_suppressed_graph_scores,
+    infer_query_domains,
+    local_semantic_connectivity,
+    normalized_drift_penalty,
+    semantic_control_adjustments,
+)
 from .ranking_fusion import compute_final_score, fusion_weights_for_intent
 from .validation import DeduplicationEngine
 from .visualization import edge_style
@@ -1240,7 +1251,7 @@ class SRGApplicationService:
             n["expand_rank"] = i
 
         hop_map: dict[str, int] = {}
-        if lite_coherence_stabilization:
+        if lite_coherence_stabilization or lite_v2_ranking:
             hop_map = SRGApplicationService._anchor_hop_distances(
                 [n["id"] for n in graph_json["nodes"]],
                 graph_json.get("edges") or [],
@@ -1261,8 +1272,20 @@ class SRGApplicationService:
         v2_fusion = (0.6, 0.3, 0.1)
         pr_n: dict[str, float] = {}
         eq_n: dict[str, float] = {}
+        ctx_n: dict[str, float] = {}
         graph_combined: dict[str, float] = {}
         qtext_for_v2 = ""
+        query_domains_v2: frozenset[str] = frozenset()
+        sem_by_id_pre: dict[str, float] = {}
+        local_conn_map: dict[str, float] = {}
+        graph_for_fusion: dict[str, float] = {}
+        lite_semantic_control = bool(opts.get("lite_semantic_control", True))
+        lite_intent_verification = bool(opts.get("lite_intent_verification", True))
+        intent_verification_meta: dict[str, Any] = {}
+        sc_gamma = float(opts.get("semantic_control_local_gamma", 0.09) or 0.09)
+        sc_delta = float(opts.get("semantic_control_drift_lambda", 0.12) or 0.12)
+        sc_gamma = max(0.0, min(0.35, sc_gamma))
+        sc_delta = max(0.0, min(0.45, sc_delta))
         if lite_v2_ranking:
             qtext_for_v2 = (query_profile.get("query_text") or "").strip()
             if not qtext_for_v2:
@@ -1271,9 +1294,23 @@ class SRGApplicationService:
             v2_intent = str(icr.get("intent") or "")
             v2_confidence = float(icr.get("confidence") or 0.0)
             v2_fusion = fusion_weights_for_intent(v2_intent)
-            pr_n, eq_n, graph_combined = compute_graph_score_bundle(
-                graph_json.get("edges") or [], node_ids_list
+            hop_for_bundle = hop_map if hop_map else None
+            pr_n, eq_n, ctx_n, graph_combined = compute_graph_score_bundle(
+                graph_json.get("edges") or [], node_ids_list, hop_for_bundle
             )
+            query_domains_v2 = infer_query_domains(qtext_for_v2)
+            for _n in graph_json["nodes"]:
+                sem_by_id_pre[_n["id"]] = float(self._semantic_fit_score(_n, query_profile))
+            local_conn_map = local_semantic_connectivity(
+                node_ids_list,
+                sem_by_id_pre,
+                graph_json.get("edges") or [],
+            )
+            deg_map = {nid: int(out_deg[nid] + in_deg[nid]) for nid in node_ids_list}
+            if lite_semantic_control:
+                graph_for_fusion = hub_suppressed_graph_scores(graph_combined, deg_map)
+            else:
+                graph_for_fusion = dict(graph_combined)
 
         for node in graph_json["nodes"]:
             pid = node["id"]
@@ -1283,10 +1320,13 @@ class SRGApplicationService:
             if lite_v2_ranking:
                 q_match = self._paper_query_match_score(node, query_profile.get("query_terms") or [])
                 node["query_match_score"] = q_match
-                sem = self._semantic_fit_score(node, query_profile)
-                gscore = float(graph_combined.get(pid, 0.45))
+                sem = float(sem_by_id_pre.get(pid, self._semantic_fit_score(node, query_profile)))
+                g_struct = float(graph_combined.get(pid, 0.45))
+                gscore = float(graph_for_fusion.get(pid, g_struct))
                 node["pagerank_norm"] = round(float(pr_n.get(pid, 0.0)), 4)
                 node["edge_quality_norm"] = round(float(eq_n.get(pid, 0.0)), 4)
+                node["context_score_norm"] = round(float(ctx_n.get(pid, 0.5)), 4)
+                node["graph_score_structural_raw"] = round(g_struct, 4)
                 inbound = SRGApplicationService._openalex_cited_by_count(merged_by_id, pid)
                 survey_ctx = infer_survey_context_flag(node)
                 canon = compute_canonicality(
@@ -1296,16 +1336,42 @@ class SRGApplicationService:
                     inbound_citations=inbound,
                     is_in_survey_context=survey_ctx,
                 )
-                raw = compute_final_score(sem, gscore, canon, v2_intent)
+                fused = compute_final_score(sem, gscore, canon, v2_intent)
+                hops = int(hop_map.get(pid, 99))
+                node["anchor_graph_hops"] = hops
+                drift_n = normalized_drift_penalty(hops)
+                loc_c = float(local_conn_map.get(pid, 0.45))
+                dom_m = domain_consistency_multiplier(node.get("domain"), query_domains_v2)
+                if lite_semantic_control:
+                    raw, drift_sub, loc_add, _dm = semantic_control_adjustments(
+                        fused_base=fused,
+                        local_conn=loc_c,
+                        drift_pen=drift_n,
+                        domain_mult=dom_m,
+                        gamma=sc_gamma,
+                        delta=sc_delta,
+                    )
+                    node["semantic_drift_penalty_norm"] = round(drift_n, 4)
+                    node["semantic_drift_penalty_applied"] = round(float(drift_sub), 6)
+                    node["local_semantic_connectivity"] = round(loc_c, 4)
+                    node["local_semantic_connectivity_bonus"] = round(float(loc_add), 6)
+                    node["domain_consistency_multiplier"] = round(dom_m, 4)
+                    node["query_inferred_domains"] = sorted(query_domains_v2)
+                else:
+                    raw = fused * dom_m
+                    node["semantic_drift_penalty_norm"] = 0.0
+                    node["local_semantic_connectivity"] = round(loc_c, 4)
+                    node["domain_consistency_multiplier"] = round(dom_m, 4)
+                    node["query_inferred_domains"] = sorted(query_domains_v2)
+                node["fused_score_pre_semantic_control"] = round(float(fused), 6)
                 node["semantic_score"] = round(float(sem), 4)
                 node["graph_score"] = round(float(gscore), 4)
                 node["canonicality_score"] = round(float(canon), 4)
                 node["semantic_fit_score"] = round(float(sem), 4)
-                if lite_coherence_stabilization:
-                    node["anchor_graph_hops"] = int(hop_map.get(pid, 99))
                 if metadata_only_mode:
                     raw *= 0.72
                 node["relevance_raw"] = raw
+                node["final_score"] = round(float(raw), 6)
                 raw_scores.append(raw)
                 continue
 
@@ -1396,6 +1462,15 @@ class SRGApplicationService:
                 raw *= 0.72
             node["relevance_raw"] = raw
             raw_scores.append(raw)
+        if lite_v2_ranking and lite_intent_verification and (qtext_for_v2 or "").strip():
+            intent_verification_meta = apply_intent_verification_layer(
+                graph_json["nodes"],
+                qtext_for_v2,
+                opts,
+                semantic_fallback=self._semantic_fit_score,
+                query_profile=query_profile,
+            )
+            raw_scores = [float(n["relevance_raw"]) for n in graph_json["nodes"]]
         max_raw = max(raw_scores) if raw_scores else 1.0
         if max_raw <= 0:
             max_raw = 1.0
@@ -1510,6 +1585,28 @@ class SRGApplicationService:
             lite_display_relevance_floor = float(opts.get("lite_user_graph_relevance_floor", 0.14) or 0.14)
         else:
             lite_display_relevance_floor = float(opts.get("lite_user_graph_relevance_floor", 0.0) or 0.0)
+        v21_diag: dict[str, Any] = {}
+        if lite_v2_ranking:
+            v21_diag = lite_v21_observability_payload(
+                nodes=graph_json["nodes"],
+                edges=graph_json.get("edges") or [],
+                references_total=int(references_total),
+                n_candidates=n_gnodes,
+                n_edges=n_gedges,
+                intent=v2_intent,
+                intent_confidence=v2_confidence,
+                fusion_weights=v2_fusion,
+            )
+            v21_diag["semantic_control"] = {
+                "enabled": lite_semantic_control,
+                "semantic_control_local_gamma": sc_gamma,
+                "semantic_control_drift_lambda": sc_delta,
+                **aggregate_semantic_control_diagnostics(graph_json["nodes"]),
+            }
+            v21_diag["intent_verification"] = {
+                "enabled": lite_intent_verification and bool((qtext_for_v2 or "").strip()),
+                **intent_verification_meta,
+            }
         retrieval_quality: dict[str, Any] = {
             "warnings": rq_warnings,
             "node_count": n_gnodes,
@@ -1523,6 +1620,9 @@ class SRGApplicationService:
             "lite_v2_ranking": lite_v2_ranking,
             "v2_intent": v2_intent if lite_v2_ranking else "",
             "v2_intent_confidence": v2_confidence if lite_v2_ranking else 0.0,
+            "v2_1_diagnostics": v21_diag if lite_v2_ranking else {},
+            "lite_semantic_control": lite_semantic_control if lite_v2_ranking else False,
+            "lite_intent_verification": lite_intent_verification if lite_v2_ranking else False,
         }
 
         return {
@@ -1580,6 +1680,11 @@ class SRGApplicationService:
                     "graph": v2_fusion[1],
                     "canonicality": v2_fusion[2],
                 },
+                "v2_1_diagnostics": v21_diag,
+                "lite_semantic_control": lite_semantic_control,
+                "semantic_control_local_gamma": sc_gamma,
+                "semantic_control_drift_lambda": sc_delta,
+                "lite_intent_verification": lite_intent_verification,
                 "foundational_boost": foundational_boost,
                 "openalex_skipped_ids": list(dict.fromkeys(skipped_ids)),
                 "pool_fill_notes": self._expand_pool_fill_notes(
@@ -1627,6 +1732,7 @@ class SRGApplicationService:
                     **query_profile,
                     "intent_mode_v2": v2_intent,
                     "intent_confidence_v2": v2_confidence,
+                    "query_inferred_domains": sorted(query_domains_v2),
                 }
                 if lite_v2_ranking
                 else query_profile
@@ -1649,34 +1755,71 @@ class SRGApplicationService:
         merged_by_id: dict[str, PaperRecord],
         edges: list[dict[str, Any]],
         query_terms: list[str] | None = None,
+        anchor_ids: set[str] | None = None,
+        semantic_control: bool = True,
     ) -> list[dict[str, Any]]:
         """
-        SRG Lite v2 ordering helper — intent classifier, canonicality, PageRank/edge-quality graph score,
-        and adaptive fusion (same logic as ``run_pipeline`` with ``lite_v2_ranking``).
+        SRG Lite v2.1 + semantic-control ordering — same signals as ``lite_v2_ranking`` when anchors are passed;
+        without ``anchor_ids``, hop drift is skipped (graph coherence from PR/edges only).
         """
         qp: dict[str, Any] = {
             "query_text": (query or "").strip(),
             "query_terms": list(query_terms or []),
             "query_intent": "method",
         }
+        qstrip = (query or "").strip()
         ids = [str(n["id"]) for n in nodes]
-        _, _, graph_combined = compute_graph_score_bundle(edges, ids)
-        icr = classify_query((query or "").strip(), {})
+        hop_map: dict[str, int] = {}
+        if anchor_ids:
+            hop_map = SRGApplicationService._anchor_hop_distances(ids, edges, anchor_ids)
+        pr_n, eq_n, ctx_n, graph_combined = compute_graph_score_bundle(edges, ids, hop_map if hop_map else None)
+        out_d = Counter(str(e["source"]) for e in edges)
+        in_d = Counter(str(e["target"]) for e in edges)
+        deg_map = {nid: int(out_d[nid] + in_d[nid]) for nid in ids}
+        graph_for = (
+            hub_suppressed_graph_scores(graph_combined, deg_map) if semantic_control else dict(graph_combined)
+        )
+        sem_by_id = {n["id"]: float(self._semantic_fit_score(n, qp)) for n in nodes}
+        local_conn_map = local_semantic_connectivity(ids, sem_by_id, edges)
+        qdom = infer_query_domains(qstrip)
+        icr = classify_query(qstrip, {})
         intent = str(icr.get("intent") or "")
+        gamma, delta = 0.09, 0.12
         ranked: list[tuple[float, dict[str, Any]]] = []
         for node in nodes:
             pid = node["id"]
-            sem = self._semantic_fit_score(node, qp)
-            gs = float(graph_combined.get(pid, 0.45))
+            sem = sem_by_id.get(pid, 0.0)
+            gs = float(graph_for.get(pid, 0.45))
             inbound = SRGApplicationService._openalex_cited_by_count(merged_by_id, pid)
             canon = compute_canonicality(
                 node,
-                (query or "").strip(),
+                qstrip,
                 intent,
                 inbound_citations=inbound,
                 is_in_survey_context=infer_survey_context_flag(node),
             )
-            score = compute_final_score(sem, gs, canon, intent)
+            fused = compute_final_score(sem, gs, canon, intent)
+            dom_m = domain_consistency_multiplier(node.get("domain"), qdom)
+            if semantic_control and hop_map:
+                drift_n = normalized_drift_penalty(int(hop_map.get(pid, 99)))
+                loc_c = float(local_conn_map.get(pid, 0.45))
+                score, _, _, _ = semantic_control_adjustments(
+                    fused_base=fused,
+                    local_conn=loc_c,
+                    drift_pen=drift_n,
+                    domain_mult=dom_m,
+                    gamma=gamma,
+                    delta=delta,
+                )
+            else:
+                score = max(0.0, fused * dom_m)
+            node["pagerank_norm"] = round(float(pr_n.get(pid, 0.0)), 4)
+            node["edge_quality_norm"] = round(float(eq_n.get(pid, 0.0)), 4)
+            node["context_score_norm"] = round(float(ctx_n.get(pid, 0.5)), 4)
+            node["graph_score"] = round(float(gs), 4)
+            node["semantic_score"] = round(float(sem), 4)
+            node["canonicality_score"] = round(float(canon), 4)
+            node["final_score"] = round(float(score), 6)
             ranked.append((score, node))
         ranked.sort(key=lambda x: x[0], reverse=True)
         return [x[1] for x in ranked]

@@ -1,4 +1,4 @@
-"""Graph-derived scores for SRG Lite v2: PageRank-style centrality + edge confidence."""
+"""Graph-derived scores — SRG Lite v2.1 §5.2: PR + edge quality + neighborhood coherence."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def pagerank_scores(
     iterations: int = 28,
 ) -> dict[str, float]:
     """
-    directed edges: source cites target → random walk follows source → target.
+    Directed edges: source cites target → random walk follows source → target.
     """
     nodes = list(dict.fromkeys(node_ids))
     n = len(nodes)
@@ -91,21 +91,47 @@ def edge_quality_scores(edges: list[dict[str, Any]], node_ids: list[str]) -> dic
     return _normalize_scores(out)
 
 
+def neighborhood_coherence_scores(
+    hop_dist: dict[str, int] | None,
+    node_ids: list[str],
+) -> dict[str, float]:
+    """
+    Local neighborhood coherence from anchor distance (§5.2 context_score).
+    High near seeds / low hop count; weak when hop_dist unavailable.
+    """
+    raw: dict[str, float] = {}
+    if not hop_dist:
+        return {nid: 0.5 for nid in node_ids}
+    for nid in node_ids:
+        h = int(hop_dist.get(nid, 99))
+        # Near anchors → high coherence; distant / unknown → low.
+        raw[nid] = 1.0 / (1.0 + min(h, 12) * 0.22)
+    return _normalize_scores(raw)
+
+
 def compute_graph_score_bundle(
     edges: list[dict[str, Any]],
     node_ids: list[str],
-) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
+    hop_dist: dict[str, int] | None = None,
+) -> tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]]:
     """
     Returns:
-        pagerank_norm, edge_quality_norm, combined_graph_score in [0,1].
+        pagerank_norm, edge_quality_norm, context_coherence_norm,
+        S_graph combined ∈ [0,1] (§5.2).
     """
     pr_raw = pagerank_scores(edges, node_ids)
     pr_n = _normalize_scores(pr_raw)
     eq_n = edge_quality_scores(edges, node_ids)
+    ctx_n = neighborhood_coherence_scores(hop_dist, node_ids)
     combined: dict[str, float] = {}
     for nid in node_ids:
         combined[nid] = max(
             0.0,
-            min(1.0, 0.55 * float(pr_n.get(nid, 0.5)) + 0.45 * float(eq_n.get(nid, 0.5))),
+            min(
+                1.0,
+                0.38 * float(pr_n.get(nid, 0.5))
+                + 0.32 * float(eq_n.get(nid, 0.5))
+                + 0.30 * float(ctx_n.get(nid, 0.5)),
+            ),
         )
-    return pr_n, eq_n, combined
+    return pr_n, eq_n, ctx_n, combined

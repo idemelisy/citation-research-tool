@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .intent_classifier import QueryIntent
+from .ranking_fusion import normalize_query_intent
 
 
 def compute_canonicality(
@@ -26,7 +27,6 @@ def compute_canonicality(
     if q and q in title:
         score += 0.6
     elif q:
-        # Partial phrase: reward strong token overlap with query (multi-word queries).
         qtok = [t for t in q.replace(",", " ").split() if len(t) > 2]
         if qtok:
             hits = sum(1 for t in qtok if t in title)
@@ -37,7 +37,8 @@ def compute_canonicality(
     if is_in_survey_context:
         score += 0.2
 
-    if intent == QueryIntent.CANONICAL_LOOKUP:
+    ni = normalize_query_intent(intent)
+    if ni in (QueryIntent.METHOD_LOOKUP, QueryIntent.DEFINITION):
         score *= 1.5
 
     return max(0.0, min(1.0, score))

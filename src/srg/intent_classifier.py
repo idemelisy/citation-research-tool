@@ -1,4 +1,4 @@
-"""Intent & mode classifier for SRG Lite v2 (query understanding layer)."""
+"""Intent & mode classifier — SRG Lite v2.1 (paper-style taxonomy)."""
 
 from __future__ import annotations
 
@@ -7,9 +7,18 @@ from typing import Any
 
 
 class QueryIntent:
+    """Structured intents from SRG Lite v2.1 §3."""
+
+    DEFINITION = "definition"
+    COMPARISON = "comparison"
+    METHOD_LOOKUP = "method_lookup"
+    SURVEY = "survey"
+    EXPLORATORY = "exploratory"
+
+    # SRG Lite v2.0 string compatibility (normalize via ranking_fusion.normalize_query_intent)
     CANONICAL_LOOKUP = "canonical_lookup"
-    SURVEY = "survey_mode"
-    EXPLORATION = "exploratory_mode"
+    SURVEY_LEGACY = "survey_mode"
+    EXPLORATION_LEGACY = "exploratory_mode"
 
 
 _DEF_WORDS = frozenset(
@@ -20,26 +29,32 @@ _DEF_WORDS = frozenset(
         "definition",
         "meaning of",
         "explain",
-        "overview of",
         "introduction to",
         "tell me about",
     )
 )
 
-_COMPARE_WORDS = frozenset(
+_SURVEY_CUES = frozenset(
+    (
+        "survey",
+        "literature review",
+        "systematic review",
+        "review of",
+        "overview of",
+        "state of the art",
+    )
+)
+
+_COMPARE_STRICT = frozenset(
     (
         " vs ",
         " versus ",
-        "compare",
+        "compare ",
         "comparison",
         "difference between",
         "differences between",
         "contrasted",
         "benchmark",
-        "state of the art",
-        "survey",
-        "literature review",
-        "systematic review",
     )
 )
 
@@ -51,11 +66,19 @@ def detect_definition_words(query: str) -> bool:
     return any(w in q for w in _DEF_WORDS)
 
 
-def detect_comparison(query: str) -> bool:
+def detect_survey_cues(query: str) -> bool:
     q = (query or "").strip().lower()
     if not q:
         return False
-    if any(w in q for w in _COMPARE_WORDS):
+    return any(w in q for w in _SURVEY_CUES)
+
+
+def detect_comparison_strict(query: str) -> bool:
+    """Head-to-head or benchmarking phrasing (§3 COMPARISON)."""
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+    if any(w in q for w in _COMPARE_STRICT):
         return True
     return bool(re.search(r"\b(and|or)\b.*\b(and|or)\b", q))
 
@@ -98,8 +121,7 @@ _STOP = frozenset(
 
 def detect_method_name_like(query: str) -> bool:
     """
-    Heuristic: reads like a standalone method/paper title (e.g. 'Direct Preference Optimization')
-    rather than a prose question.
+    Reads like a standalone method/paper title (e.g. 'Direct Preference Optimization').
     """
     q = (query or "").strip()
     if not q:
@@ -107,12 +129,13 @@ def detect_method_name_like(query: str) -> bool:
     words = q.split()
     if len(words) < 2 or len(words) > 12:
         return False
-    if detect_comparison(q):
+    if detect_comparison_strict(q):
         return False
     if detect_definition_words(q):
         return False
+    if detect_survey_cues(q):
+        return False
     caps = sum(1 for w in words if w[:1].isupper())
-    # Prefer capitalized technical titles or acronym-heavy short phrases.
     if caps >= max(2, len(words) // 2):
         return True
     if len(words) <= 6 and all(len(w) <= 40 for w in words):
@@ -122,24 +145,22 @@ def detect_method_name_like(query: str) -> bool:
 
 def classify_query(query: str, context: dict[str, Any]) -> dict[str, Any]:
     """
-    Returns:
+    Hybrid heuristic classifier (§3). Returns:
         {"intent": str, "confidence": float}
     """
-    _ = context  # reserved for session / discipline hints
-    features = {
-        "has_definition_terms": detect_definition_words(query),
-        "has_compare_terms": detect_comparison(query),
-        "is_single_entity_query": detect_entity_like_query(query),
-        "looks_like_method_name": detect_method_name_like(query),
-    }
+    _ = context
+    q = (query or "").strip()
 
-    if features["has_definition_terms"] and features["is_single_entity_query"]:
-        return {"intent": QueryIntent.CANONICAL_LOOKUP, "confidence": 0.8}
+    if detect_comparison_strict(q):
+        return {"intent": QueryIntent.COMPARISON, "confidence": 0.72}
 
-    if features["has_compare_terms"]:
+    if detect_survey_cues(q):
         return {"intent": QueryIntent.SURVEY, "confidence": 0.7}
 
-    if features["looks_like_method_name"] and features["is_single_entity_query"]:
-        return {"intent": QueryIntent.CANONICAL_LOOKUP, "confidence": 0.72}
+    if detect_definition_words(q) and detect_entity_like_query(q):
+        return {"intent": QueryIntent.DEFINITION, "confidence": 0.8}
 
-    return {"intent": QueryIntent.EXPLORATION, "confidence": 0.6}
+    if detect_method_name_like(q) and detect_entity_like_query(q):
+        return {"intent": QueryIntent.METHOD_LOOKUP, "confidence": 0.72}
+
+    return {"intent": QueryIntent.EXPLORATORY, "confidence": 0.6}
