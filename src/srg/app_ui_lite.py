@@ -25,7 +25,7 @@ if __package__ in (None, ""):
         _related_edges,
         _to_agraph_payload,
     )
-    from srg.synthesis_export import _group_papers_by_topic, build_bibtex, build_markdown_report
+    from srg.synthesis_export import build_bibtex, build_markdown_report
 else:
     from .api_adapter import SRGApplicationService
     from .app_ui import (
@@ -36,7 +36,7 @@ else:
         _related_edges,
         _to_agraph_payload,
     )
-    from .synthesis_export import _group_papers_by_topic, build_bibtex, build_markdown_report
+    from .synthesis_export import build_bibtex, build_markdown_report
 
 # Field-aware discovery phase: citation neighborhoods first; lexical/topic signals secondary.
 LITE_DISCOVERY_OPTIONS: dict[str, Any] = {
@@ -63,6 +63,18 @@ LITE_DISCOVERY_OPTIONS: dict[str, Any] = {
     "lite_semantic_control": True,
     # Intent verification + semantic alignment (embedding cosine if sentence-transformers installed).
     "lite_intent_verification": True,
+    # Roadmap Phase 2.3 — Markdown export without raw internal ids / verbose diagnostics.
+    "export_clean_reading_mode": True,
+    # Phase 1.1 / 1.3 / 2.2 (see api_adapter + canonicality + roadmap_metrics).
+    "lite_query_conditioned_canonicality": True,
+    "lite_semantic_rank_hard_floor": True,
+    "lite_foundational_eligibility_rules": True,
+    "semantic_rank_min_score": 0.25,
+    "below_semantic_floor_multiplier": 0.4,
+    "semantic_top10_below_floor_multiplier": 0.35,
+    "foundational_min_semantic_score": 0.35,
+    "foundational_min_intent_similarity": 0.30,
+    "foundational_max_anchor_hops": 3,
 }
 
 LITE_CSS = """
@@ -78,7 +90,12 @@ def _fmt_domain(domain: str | None) -> str:
     return d.replace("_", " ").title()
 
 
-def _papers_by_branch(papers: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _papers_by_branch(
+    papers: list[dict[str, Any]],
+    *,
+    intent_mode_v2: str | None = None,
+    query_text: str | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     buckets: dict[str, list[dict[str, Any]]] = {}
     for p in papers:
         if p.get("graph_noise"):
@@ -86,17 +103,37 @@ def _papers_by_branch(papers: list[dict[str, Any]]) -> dict[str, list[dict[str, 
         key = _fmt_domain(p.get("domain"))
         buckets.setdefault(key, []).append(p)
     for k, rows in buckets.items():
-        buckets[k] = sorted(rows, key=_importance_score_for_ui, reverse=True)
+        buckets[k] = sorted(
+            rows,
+            key=lambda p: _importance_score_for_ui(
+                p, intent_mode_v2=intent_mode_v2, query_text=query_text
+            ),
+            reverse=True,
+        )
     return dict(sorted(buckets.items(), key=lambda kv: (-len(kv[1]), kv[0])))
 
 
-def _research_branches_for_lite(papers: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-    """Prefer title-derived research directions when varied; else inferred domain buckets."""
+def _research_branches_for_lite(
+    papers: list[dict[str, Any]],
+    payload: dict[str, Any] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Query-aware topic branches (roadmap 2.1); fall back to domain buckets when needed."""
+    try:
+        from .synthesis_export import group_papers_query_aware_topics
+    except ImportError:
+        from srg.synthesis_export import group_papers_query_aware_topics
+
     clean = [p for p in papers if not p.get("graph_noise")]
-    by_topic = _group_papers_by_topic(clean)
+    qp = (payload or {}).get("query_profile") or {}
+    by_topic = group_papers_query_aware_topics(clean, qp)
     if len(by_topic) >= 2:
         return by_topic
-    return _papers_by_branch(clean)
+    _qt = (qp.get("query_text") or "").strip() or None
+    return _papers_by_branch(
+        clean,
+        intent_mode_v2=(qp.get("intent_mode_v2") or None),
+        query_text=_qt,
+    )
 
 
 def _branch_description(branch_label: str) -> str:
@@ -109,6 +146,12 @@ def _branch_description(branch_label: str) -> str:
 def _trust_explanation_lines(paper: dict[str, Any]) -> list[str]:
     """Trust / explainability — citation-backed placement and field position (coherence phase)."""
     lines: list[str] = []
+    wim = (paper.get("why_it_matters") or "").strip()
+    if wim:
+        for part in wim.split("\n"):
+            p = part.strip()
+            if p:
+                lines.append(p)
     tier = (paper.get("field_coherence_tier") or "").strip().lower()
     if tier == "core":
         lines.append("Field position: core — close to anchors or strong citation ties to the query literature.")
@@ -136,7 +179,17 @@ def _trust_explanation_lines(paper: dict[str, Any]) -> list[str]:
         lines.append("Highly cited or central in this literature slice (foundational hub).")
     elif rel > 0 and paper.get("seed_origin") == "discovered":
         lines.append("Reached through citation expansion from your anchors, ranked by research proximity.")
-    return lines[:8]
+    isim = paper.get("intent_similarity")
+    if isim is not None:
+        try:
+            iv = float(isim)
+            if iv >= 0.55:
+                lines.append(f"Intent verification: strong query–document alignment (≈{iv:.2f}).")
+            elif iv >= 0.35:
+                lines.append(f"Intent verification: moderate alignment with your query (≈{iv:.2f}).")
+        except (TypeError, ValueError):
+            pass
+    return lines[:12]
 
 
 def _openalex_citation_count(paper: dict[str, Any]) -> int | None:
@@ -152,10 +205,22 @@ def _openalex_citation_count(paper: dict[str, Any]) -> int | None:
     return None
 
 
-def _recent_important(papers: list[dict[str, Any]], *, current_year: int = 2026, window: int = 5) -> list[dict[str, Any]]:
+def _recent_important(
+    papers: list[dict[str, Any]],
+    *,
+    payload: dict[str, Any] | None = None,
+    current_year: int = 2026,
+    window: int = 5,
+) -> list[dict[str, Any]]:
     lo = current_year - window
     cand = [p for p in papers if not p.get("graph_noise") and p.get("year") is not None and int(p["year"]) >= lo]
-    cand.sort(key=_importance_score_for_ui, reverse=True)
+    _qp = (payload or {}).get("query_profile") or {}
+    _iv2 = _qp.get("intent_mode_v2")
+    _qt = (_qp.get("query_text") or "").strip() or None
+    cand.sort(
+        key=lambda p: _importance_score_for_ui(p, intent_mode_v2=_iv2, query_text=_qt),
+        reverse=True,
+    )
     return cand[:12]
 
 
@@ -169,14 +234,19 @@ def _start_here_papers(payload: dict[str, Any], pmap: dict[str, dict[str, Any]])
             continue
         p = pmap.get(pid)
         if p and not p.get("graph_noise"):
+            if str(p.get("title") or "").startswith("Pending metadata"):
+                continue
             out.append(p)
             seen.add(pid)
         if len(out) >= 8:
             break
     if len(out) < 5:
+        _qp = payload.get("query_profile") or {}
+        _iv2 = _qp.get("intent_mode_v2")
+        _qt = (_qp.get("query_text") or "").strip() or None
         ranked = sorted(
             [p for p in (payload.get("papers") or []) if not p.get("graph_noise")],
-            key=_importance_score_for_ui,
+            key=lambda p: _importance_score_for_ui(p, intent_mode_v2=_iv2, query_text=_qt),
             reverse=True,
         )
         for p in ranked:
@@ -302,9 +372,11 @@ def run_srg_lite_ui() -> None:
 
     papers = [p for p in (payload.get("papers") or []) if not p.get("graph_noise")]
     pmap = _paper_map(payload["papers"])
-    branches = _research_branches_for_lite(papers)
-    foundational = [p for p in papers if p.get("is_foundational_hub")]
-    recent_imp = _recent_important(papers)
+    branches = _research_branches_for_lite(papers, payload)
+    foundational = [
+        p for p in papers if p.get("is_foundational_hub") and p.get("foundational_eligible", True)
+    ]
+    recent_imp = _recent_important(papers, payload=payload)
     start_here = _start_here_papers(payload, pmap)
 
     display_floor = float(payload.get("lite_display_relevance_floor") or 0.0)
@@ -334,7 +406,11 @@ def run_srg_lite_ui() -> None:
             for branch_name, plist in list(branches.items())[:12]:
                 with st.expander(f"{branch_name} ({len(plist)})", expanded=False):
                     st.caption(_branch_description(branch_name))
-                    found_b = [p for p in plist if p.get("is_foundational_hub")][:4]
+                    found_b = [
+                        p
+                        for p in plist
+                        if p.get("is_foundational_hub") and p.get("foundational_eligible", True)
+                    ][:4]
                     recent_b = [p for p in plist if p.get("year") and int(p["year"]) >= 2021][:4]
                     if found_b:
                         st.markdown("**Foundational**")
@@ -392,7 +468,11 @@ def run_srg_lite_ui() -> None:
         with dl1:
             st.download_button(
                 "Export reading list (Markdown)",
-                data=build_markdown_report(payload, project_title="SRG Lite reading list"),
+                data=build_markdown_report(
+                    payload,
+                    project_title="SRG Lite reading list",
+                    clean=bool(LITE_DISCOVERY_OPTIONS.get("export_clean_reading_mode", True)),
+                ),
                 file_name="srg_lite_reading_list.md",
                 mime="text/markdown",
                 key="lite_dl_md",

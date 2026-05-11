@@ -1,0 +1,1127 @@
+# SRG Lite Roadmap — From Research Prototype to Production-Grade Research Discovery System
+
+## Current State Assessment
+
+SRG Lite has already evolved beyond a simple retrieval prototype. The system now includes:
+
+* Hybrid semantic + graph-based ranking
+* Intent verification and semantic alignment
+* Citation graph reasoning
+* Foundational paper detection
+* Topic separation and clustering
+* Diagnostics and provenance tracking
+* Fallback semantic retrieval
+* Diversity-aware normalization
+* Query-conditioned retrieval passes
+* Structured export generation
+
+This places the system in the category of:
+
+> “advanced research prototype approaching early product maturity.”
+
+The remaining challenges are no longer primarily about “can the system retrieve papers,” but instead:
+
+1. Ranking calibration
+2. Query-specific relevance control
+3. Trust consistency
+4. UX coherence
+5. Evaluation rigor
+6. Explainability
+7. Product polish
+
+The roadmap below defines the recommended evolution path from the current SRG Lite v2 state toward a production-grade research discovery platform.
+
+---
+
+# Phase 1 — Ranking Correctness and Retrieval Reliability
+
+## Target Timeline
+
+2–4 weeks
+
+## Goal
+
+Ensure that the ranking engine behaves correctly across different query types and that semantic relevance consistently dominates unrelated graph popularity.
+
+This phase is the highest priority because ranking correctness determines whether users trust the system at all.
+
+---
+
+# 1.1 Query-Conditioned Canonicality
+
+## Problem
+
+Current canonicality scoring appears globally biased toward:
+
+* high citation count,
+* graph hubs,
+* older foundational papers.
+
+This creates failure modes where:
+
+* broad theoretical papers outrank query-specific technical papers,
+* old foundational work dominates practical systems queries.
+
+Example:
+For:
+
+> “hardware accelerated tessellation”
+
+The system incorrectly promotes:
+
+* general surface design papers,
+  instead of:
+* GPU tessellation and hardware rendering papers.
+
+---
+
+## Required Change
+
+Canonicality must become query-conditioned instead of globally static.
+
+Current implicit behavior:
+
+score(p)=semantic(p,q)+global_centrality(p)+canonicality(p)
+
+Desired behavior:
+
+canonicality_{query}(p)=centrality(p)\cdot proximity(p,anchor_papers(q))\cdot intent_alignment(p,q)
+
+---
+
+## Implementation Tasks
+
+### Add Query Anchor Papers
+
+* Select top-k semantic seed papers
+* Build local query neighborhood
+* Use local graph proximity instead of global graph importance
+
+### Add Anchor Distance Metric
+
+Candidate metrics:
+
+* shortest citation-path distance,
+* co-citation overlap,
+* bibliographic coupling,
+* personalized PageRank.
+
+### Add Query-Specific Centrality
+
+Replace:
+
+* global citation hub scoring,
+  with:
+* local query-neighborhood importance.
+
+---
+
+## Expected Outcome
+
+The system should:
+
+* prioritize technically relevant papers,
+* reduce irrelevant foundational dominance,
+* improve query specificity,
+* improve top-10 precision substantially.
+
+---
+
+# 1.2 Intent System Expansion
+
+## Problem
+
+Current intents are too coarse:
+
+* DEFINITION
+* SURVEY
+* EXPLORATORY
+
+Technical queries often belong to different retrieval behaviors.
+
+Example:
+
+> “hardware accelerated tessellation”
+
+This is:
+
+* implementation-focused,
+* systems-oriented,
+* engineering-heavy,
+* recency-sensitive.
+
+---
+
+## Required New Intent Classes
+
+### TECHNICAL_METHOD
+
+Characteristics:
+
+* implementation details,
+* algorithm engineering,
+* architecture-specific methods,
+* optimization techniques.
+
+### HARDWARE_SYSTEM
+
+Characteristics:
+
+* GPU,
+* distributed systems,
+* hardware acceleration,
+* runtime performance,
+* rendering pipelines.
+
+### HISTORICAL_FOUNDATION
+
+Characteristics:
+
+* seminal theory,
+* foundational methods,
+* original formulations.
+
+### RECENT_PROGRESS
+
+Characteristics:
+
+* modern improvements,
+* recent benchmarks,
+* state-of-the-art methods.
+
+---
+
+## Retrieval Behavior Per Intent
+
+### HARDWARE_SYSTEM
+
+Increase:
+
+* recency weighting,
+* venue quality,
+* implementation relevance.
+
+Decrease:
+
+* old global graph hubs,
+* purely theoretical papers.
+
+### HISTORICAL_FOUNDATION
+
+Increase:
+
+* citation centrality,
+* seminal graph position.
+
+Decrease:
+
+* recency importance.
+
+---
+
+## Expected Outcome
+
+The system becomes:
+
+* query-adaptive,
+* domain-sensitive,
+* less generic,
+* more aligned with researcher expectations.
+
+---
+
+# 1.3 Semantic Drift Suppression Improvements
+
+## Problem
+
+Some graph expansions drift into loosely related areas because:
+
+* graph connectivity propagates relevance,
+* semantic penalties are insufficient.
+
+---
+
+## Required Improvements
+
+### Hard Semantic Thresholds
+
+Prevent papers below:
+
+* minimum semantic similarity,
+* minimum intent alignment,
+  from entering top-ranked results.
+
+### Multi-Hop Decay
+
+Penalty should increase with:
+
+* graph distance from anchor set.
+
+### Vocabulary Coherence Checks
+
+Add:
+
+* domain keyword overlap,
+* embedding neighborhood consistency.
+
+---
+
+## Expected Outcome
+
+Reduced topic drift and improved retrieval coherence.
+
+---
+
+# Phase 2 — Trust, UX, and Researcher Confidence
+
+## Target Timeline
+
+4–8 weeks
+
+## Goal
+
+Transform SRG Lite from:
+
+> “powerful prototype”
+
+into:
+
+> “credible researcher-facing tool.”
+
+This phase is primarily psychological and UX-oriented.
+
+---
+
+# 2.1 Cluster Labeling System Rewrite
+
+## Problem
+
+Incorrect cluster labels destroy trust instantly.
+
+Example:
+
+> “General Preference Alignment”
+> appearing inside a graphics query.
+
+This suggests:
+
+* topic leakage,
+* stale taxonomy reuse,
+* cached labels from unrelated domains.
+
+Even if retrieval quality is high, this damages credibility.
+
+---
+
+## Required Changes
+
+### Remove Shared Global Label Pools
+
+Cluster labels must be:
+
+* generated per-query,
+* generated per-cluster,
+* context-dependent.
+
+### Generate Labels Dynamically
+
+Potential methods:
+
+* TF-IDF keyword extraction,
+* KeyBERT,
+* cluster centroid embeddings,
+* LLM-assisted labeling.
+
+### Add Domain Sanity Checks
+
+Prevent:
+
+* NLP labels inside graphics queries,
+* biology labels inside systems queries.
+
+---
+
+## Expected Outcome
+
+Users perceive:
+
+* coherence,
+* topical understanding,
+* system intelligence.
+
+---
+
+# 2.2 Foundational Section Consistency Rules
+
+## Problem
+
+Papers with:
+
+> semantic match ≈ 0.0
+> appear inside:
+> foundational query papers.
+
+This creates contradiction.
+
+---
+
+## Required Changes
+
+### Add Foundational Eligibility Rules
+
+Minimum requirements:
+
+* semantic relevance threshold,
+* anchor proximity threshold,
+* intent compatibility,
+* graph confidence threshold.
+
+---
+
+## Suggested Formula
+
+foundational(p,q)=centrality(p)\cdot semantic(p,q)\cdot anchor_proximity(p,q)
+
+If semantic relevance is near zero:
+
+* paper cannot appear as foundational.
+
+---
+
+## Expected Outcome
+
+More internally consistent explanations and better trust.
+
+---
+
+# 2.3 Export and Markdown Professionalization
+
+## Problem
+
+Current exports expose:
+
+* raw OpenAlex IDs,
+* debugging artifacts,
+* excessive decimal precision,
+* internal diagnostics.
+
+This feels like:
+
+* research logs,
+  not:
+* shareable academic outputs.
+
+---
+
+## Required Changes
+
+### Add Clean Reading Mode
+
+Hide:
+
+* internal IDs,
+* low-level metrics,
+* unresolved metadata.
+
+### Citation Formatting
+
+Support:
+
+* APA,
+* IEEE,
+* BibTeX export,
+* Zotero-compatible output.
+
+### Human-Friendly Scoring
+
+Instead of:
+
+* 4.655 importance,
+  use:
+* High relevance,
+* Foundational,
+* Strongly connected.
+
+### Section Refinement
+
+Improve:
+
+* reading guides,
+* topic grouping,
+* paper summaries.
+
+---
+
+## Expected Outcome
+
+Researchers can directly:
+
+* share outputs,
+* save reading lists,
+* integrate results into workflows.
+
+---
+
+# 2.4 “Why This Matters” Explanations
+
+## Problem
+
+The system computes reasoning signals but does not expose them clearly.
+
+This wastes one of SRG Lite’s strongest advantages.
+
+---
+
+## Required Changes
+
+Each paper card should include:
+
+* relevance explanation,
+* graph explanation,
+* semantic explanation.
+
+---
+
+## Example Explanation
+
+> “This paper is important because it introduced GPU-friendly approximations for subdivision surfaces and is strongly connected to your query anchors through bibliographic coupling.”
+
+---
+
+## Explanation Sources
+
+Use:
+
+* citation graph,
+* co-citation evidence,
+* semantic alignment,
+* venue importance,
+* recency relevance.
+
+---
+
+## Expected Outcome
+
+Massive trust improvement.
+
+Users tolerate imperfect ranking if:
+
+* explanations feel coherent.
+
+---
+
+# Phase 3 — Evaluation and Scientific Validation
+
+## Target Timeline
+
+8–16 weeks
+
+## Goal
+
+Move from:
+
+> qualitative debugging
+
+to:
+
+> measurable retrieval evaluation.
+
+This is mandatory before serious deployment or publication claims.
+
+---
+
+# 3.1 Build Evaluation Benchmark
+
+## Required Dataset
+
+Construct:
+
+* 10–15 representative research queries,
+  across:
+* graphics,
+* systems,
+* machine learning,
+* biology,
+* HCI,
+* ethics,
+* mathematics.
+
+---
+
+## Human Annotation
+
+For each query:
+
+* evaluate top-10 papers,
+* label:
+
+  * relevant,
+  * partially relevant,
+  * irrelevant.
+
+---
+
+## Metrics
+
+### Retrieval Metrics
+
+* Precision@5
+* Precision@10
+* MRR
+* NDCG
+
+### Semantic Metrics
+
+* topic coherence,
+* query alignment.
+
+### UX Metrics
+
+* explanation usefulness,
+* cluster coherence,
+* perceived trustworthiness.
+
+---
+
+## Expected Outcome
+
+You stop debugging by intuition and begin:
+
+* measurable iteration,
+* regression detection,
+* ranking calibration.
+
+---
+
+# 3.2 Failure Taxonomy System
+
+## Goal
+
+Categorize retrieval failures systematically.
+
+---
+
+## Failure Categories
+
+### Semantic Drift
+
+Results move into unrelated fields.
+
+### Foundational Overshadowing
+
+Old hub papers dominate technical queries.
+
+### Cluster Leakage
+
+Wrong topic labels appear.
+
+### Recency Failure
+
+Modern systems papers under-ranked.
+
+### Over-Specialization
+
+Narrow papers dominate broader queries.
+
+---
+
+## Expected Outcome
+
+Faster debugging and more systematic improvement.
+
+---
+
+# Phase 4 — Learning-to-Rank and Adaptive Intelligence
+
+## Target Timeline
+
+3–6 months
+
+## Goal
+
+Transition from manually tuned weighting systems toward adaptive ranking.
+
+---
+
+# 4.1 Learning-to-Rank Layer
+
+## Problem
+
+Current weights:
+
+* α,
+* β,
+* γ,
+* δ,
+  are manually selected.
+
+Manual tuning eventually becomes unstable.
+
+---
+
+## Required Upgrade
+
+Train ranking models using:
+
+* relevance annotations,
+* click behavior,
+* user saves,
+* reading list interactions.
+
+---
+
+## Candidate Approaches
+
+### LambdaMART
+
+Good for:
+
+* explainable ranking,
+* feature engineering.
+
+### Neural Re-Rankers
+
+Good for:
+
+* semantic nuance,
+* contextual ranking.
+
+---
+
+## Features
+
+Potential ranking features:
+
+* semantic similarity,
+* graph centrality,
+* recency,
+* venue quality,
+* anchor proximity,
+* citation trajectory,
+* co-citation strength.
+
+---
+
+# 4.2 Temporal Citation Dynamics
+
+## Problem
+
+Citation count alone favors old papers.
+
+---
+
+## Add:
+
+* citation acceleration,
+* recent influence growth,
+* temporal graph weighting.
+
+---
+
+## Expected Outcome
+
+Better discovery of:
+
+* emerging influential papers,
+* recent breakthroughs,
+* modern technical work.
+
+---
+
+# Phase 5 — Productization and Broad Deployment
+
+## Target Timeline
+
+6–12 months
+
+## Goal
+
+Evolve SRG Lite into a polished research platform.
+
+---
+
+# 5.1 Research Workflow Features
+
+Add:
+
+* saved reading lists,
+* citation exports,
+* project collections,
+* query history,
+* paper bookmarking.
+
+---
+
+# 5.2 Interactive Graph Exploration
+
+Enable:
+
+* query neighborhood visualization,
+* interactive citation paths,
+* semantic cluster navigation.
+
+---
+
+# 5.3 Personalized Retrieval
+
+Future optional features:
+
+* research interest modeling,
+* adaptive ranking,
+* field-aware recommendations.
+
+---
+
+# 5.4 Multi-Source Integration
+
+Expand beyond:
+
+* OpenAlex.
+
+Potential integrations:
+
+* arXiv,
+* Semantic Scholar,
+* Crossref,
+* PubMed,
+* DBLP.
+
+---
+
+# Final Strategic Assessment
+
+SRG Lite is no longer solving:
+
+> “Can graph + semantic retrieval work?”
+
+That question is already mostly answered.
+
+The next challenge is:
+
+> “Can the system become trustworthy, coherent, explainable, and consistently useful to researchers?”
+
+The strongest opportunities now are:
+
+* query-conditioned graph reasoning,
+* explanation generation,
+* trust consistency,
+* evaluation rigor,
+* adaptive ranking.
+
+The strongest risk is:
+
+* credibility damage from inconsistent outputs.
+
+The architecture is already sophisticated enough to support a serious research discovery platform. The remaining work is primarily:
+
+* calibration,
+* validation,
+* UX refinement,
+* trust engineering,
+* evaluation infrastructure.
+
+
+New Fix:
+Overview
+
+This document specifies the required system changes already partially implemented, but now formalized for consistent production behavior across ranking, clustering, filtering, and export.
+
+The goal is to ensure:
+
+Hardware / technical queries prioritize domain-specific modern methods
+Semantic mismatch cannot leak into “foundational” results
+Clusters and exports are query-conditioned and user-readable
+Output explanations are interpretable and trust-preserving
+PHASE 1 — Ranking Correctness & Reliability
+1.1 Query-Conditioned Canonicality (MANDATORY)
+File:
+
+canonicality.py
+
+New Function:
+compute_query_conditioned_canonicality(paper, query_context)
+Formula Components:
+
+Canonicality is now:
+
+final_canonicality =
+    base_canonicality
+  + anchor_proximity_factor
+  + semantic_alignment_score
+  + vocabulary_coherence_score
+  - recency_penalty_decay (if outdated for query type)
+Anchor Proximity (NEW CRITICAL SIGNAL)
+anchor_proximity_factor(hops)
+
+Rules:
+
+hops = graph distance from query anchor papers
+weighting:
+hops = 1 → +1.0
+hops = 2 → +0.6
+hops = 3 → +0.3
+hops > 3 → 0.0
+
+👉 MUST override raw citation dominance when conflict exists.
+
+Integration Rule:
+
+In:
+
+lite_v2_ranking.py
+
+Replace:
+
+canonicality_score = base_canonicality
+
+With:
+
+canonicality_score = compute_query_conditioned_canonicality(...)
+1.2 Intent Classification Expansion
+File:
+
+intent_classifier.py
+
+Add New Intents:
+TECHNICAL_METHOD
+HARDWARE_SYSTEM
+HISTORICAL_FOUNDATION
+RECENT_PROGRESS
+Classification Heuristics:
+HARDWARE_SYSTEM
+
+Trigger if:
+
+"gpu", "hardware", "tessellation", "shader", "pipeline"
+"real-time", "accelerated", "parallel", "graphics hardware"
+TECHNICAL_METHOD
+"algorithm", "method", "optimization", "framework", "model"
+HISTORICAL_FOUNDATION
+high citation + older than threshold (e.g., >15 years)
+RECENT_PROGRESS
+publication year within last N years OR mentions "real-time", "modern GPU", "neural rendering"
+Output:
+intent_distribution = {
+    "hardware_system": 0.4,
+    "technical_method": 0.3,
+    ...
+}
+1.3 Ranking Fusion Weight Update
+File:
+
+ranking_fusion.py
+
+Add conditional weight matrix:
+fusion_weights = {
+  HARDWARE_SYSTEM: {
+      "semantic": 0.45,
+      "canonicality": 0.35,
+      "graph": 0.20
+  },
+  TECHNICAL_METHOD: {
+      "semantic": 0.40,
+      "graph": 0.30,
+      "canonicality": 0.30
+  },
+  HISTORICAL_FOUNDATION: {
+      "graph": 0.50,
+      "canonicality": 0.30,
+      "semantic": 0.20
+  },
+  RECENT_PROGRESS: {
+      "semantic": 0.45,
+      "recency": 0.35,
+      "graph": 0.20
+  }
+}
+1.4 Semantic Hard Floor Gate
+File:
+
+semantic_control.py
+
+Function:
+_apply_semantic_hard_floor_v2(paper_score, intent_score, threshold)
+Rule:
+
+If:
+
+max(semantic_score, intent_similarity) < threshold
+
+Then:
+
+final_score *= below_floor_multiplier
+
+Defaults:
+
+threshold = 0.25
+below_floor_multiplier = 0.4
+PHASE 2 — Trust, UX, and Interpretability
+2.1 Query-Aware Cluster Labeling (CRITICAL FIX)
+File:
+
+synthesis_export.py
+
+Replace:
+
+GLOBAL CLUSTER LABELS ❌
+
+With:
+group_papers_query_aware_topics(papers, query_context)
+Label Generation Logic:
+
+If cluster label is:
+
+"General Preference Alignment"
+"Uncategorized"
+"Related cluster"
+or too broad (>2 domains mixed)
+
+👉 REGENERATE LABEL:
+
+label = extract_query_conditioned_label(title_tokens, query_tokens)
+Label Strategy:
+
+Priority:
+
+Query overlap words
+Domain-specific nouns
+Paper title semantic centroid
+Output Example:
+
+Instead of:
+
+"General Preference Alignment"
+
+Now:
+
+"GPU Tessellation & Subdivision Surfaces"
+
+2.2 Foundational Eligibility System (STRICT FILTER)
+File:
+
+api_adapter.py
+
+Function:
+_apply_foundational_eligibility_flags(paper, query_context)
+HARD RULE:
+
+A paper is eligible ONLY IF:
+
+semantic_score >= 0.35
+AND intent_similarity >= 0.30
+AND anchor_hops <= 3
+Output Field:
+paper["foundational_eligible"] = True/False
+IMPORTANT:
+Foundational section MUST filter:
+if not foundational_eligible:
+    exclude_from_foundational()
+NO exceptions for graph hubs
+2.3 Export Cleanup Mode (USER-FACING FIX)
+File:
+
+synthesis_export.py
+
+Function:
+build_markdown_report(clean=True)
+If clean=True:
+
+REMOVE:
+
+OpenAlex IDs
+raw graph scores
+edge counts
+internal diagnostics
+system-only labels
+
+KEEP:
+
+title
+short relevance label
+1-line explanation
+rank
+Output format:
+# Paper Title — High relevance
+Why: Strong alignment with GPU tessellation and subdivision methods.
+2.4 “Why This Matters” Explanation Field (REQUIRED)
+File:
+
+app_ui_lite.py
+
+Function:
+_trust_explanation_lines(paper, intent_context)
+REQUIRED FIELD PER PAPER:
+paper["why_it_matters"]
+Template:
+Selected because:
+- High semantic match to query intent (hardware_system)
+- Strong co-citation with anchor papers
+- Central to GPU tessellation / subdivision literature
+If missing:
+
+Generate fallback:
+
+"This paper is included due to structural relevance in the citation graph and moderate semantic alignment."
+PHASE 3 — Light Scaffolding (DO NOT FULLY BUILD YET)
+3.1 Evaluation Harness (roadmap_metrics.py)
+Add:
+precision_at_k
+reciprocal_rank
+failure_taxonomy
+Must support:
+per-query evaluation set
+ranked list comparison
+human judgment integration
+3.2 System Diagnostics
+File:
+
+v2_1_diagnostics
+
+Add:
+
+roadmap_flags = {
+  "query_conditioned_canonicality": True,
+  "semantic_hard_floor": True,
+  "foundational_filtering": True,
+  "clean_export_mode": True
+}
+3.3 LITE OPTIONS EXTENSION
+
+Add to:
+
+LITE_DISCOVERY_OPTIONS
+lite_query_conditioned_canonicality: bool
+lite_semantic_rank_hard_floor: bool
+lite_foundational_eligibility_rules: bool
+export_clean_reading_mode: bool
+SYSTEM-WIDE RULES (IMPORTANT)
+Rule A — No Graph Dominance in Semantic Mismatch
+
+If:
+
+semantic_score < threshold
+
+Then:
+
+graph score cannot promote paper into top-10
+
+Rule B — Foundational Section Is Not Graph-Based
+
+Foundational =
+
+semantic + intent + anchor proximity ONLY
+
+NOT citation count.
+
+Rule C — Clusters Are Query-Local Objects
+
+Never reuse global labels.
+
+Rule D — Export Must Be Human-First
+
+Never expose:
+
+IDs
+internal scoring formulas
+debug metadata
+END OF PATCH SPEC

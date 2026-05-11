@@ -8,6 +8,7 @@ local semantic connectivity, domain consistency, and degree-aware hub suppressio
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
 from typing import Any
 
@@ -53,6 +54,30 @@ QUERY_DOMAIN_HINTS: list[tuple[str, str]] = [
     ("hardware accelerated", "cs"),
     ("accelerated", "cs"),
 ]
+
+
+_STOPWORDS = frozenset(
+    "the a an of for to in on and or with by as at from into over per via using "
+    "paper we our this that these those is are was were be been being it its "
+    "method methods approach model models learning data based new using study "
+    "analysis work results between among".split()
+)
+
+
+def vocabulary_coherence_score(query: str, node: dict[str, Any]) -> float:
+    """
+    Phase 1.3 — domain / query vocabulary overlap in title + abstract (no embeddings).
+    Returns [0, 1].
+    """
+    q = (query or "").lower()
+    blob = f"{node.get('title', '')} {str(node.get('abstract') or '')[:3200]}".lower()
+    if not q.strip() or not blob.strip():
+        return 0.45
+    qtok = [t for t in re.split(r"[^\w]+", q) if len(t) > 2 and t not in _STOPWORDS]
+    if not qtok:
+        return 0.45
+    hits = sum(1 for t in qtok if t in blob)
+    return max(0.0, min(1.0, hits / max(len(set(qtok)), 1)))
 
 
 def infer_query_domains(query: str) -> frozenset[str]:

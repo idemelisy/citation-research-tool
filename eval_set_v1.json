@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "description": "SRG Lite v2.2 offline evaluation seeds (PR F1) — curated text queries by domain.",
+  "queries": [
+    {"id": "g01", "domain": "graphics", "text": "hardware accelerated tessellation GPU pipeline", "gold_intent": "hardware_system"},
+    {"id": "g02", "domain": "graphics", "text": "GPU tessellation pipeline subdivision surfaces", "gold_intent": "hardware_system"},
+    {"id": "g03", "domain": "graphics", "text": "real-time shader compilation mobile graphics", "gold_intent": "hardware_system"},
+    {"id": "m01", "domain": "ml", "text": "direct preference optimization alignment survey", "gold_intent": "survey"},
+    {"id": "m02", "domain": "ml", "text": "low-rank adaptation parameter efficient finetuning", "gold_intent": "technical_method"},
+    {"id": "m03", "domain": "ml", "text": "neural scaling laws transformer compute optimal", "gold_intent": "technical_method"},
+    {"id": "s01", "domain": "systems", "text": "distributed consensus raft fault tolerance", "gold_intent": "technical_method"},
+    {"id": "s02", "domain": "systems", "text": "kernel bypass networking RDMA latency", "gold_intent": "hardware_system"},
+    {"id": "s03", "domain": "systems", "text": "microservices observability tracing production", "gold_intent": "technical_method"},
+    {"id": "t01", "domain": "theory", "text": "probabilistically checkable proofs PCP theorem", "gold_intent": "exploratory"},
+    {"id": "t02", "domain": "theory", "text": "fine-grained complexity reductions lower bounds", "gold_intent": "exploratory"},
+    {"id": "b01", "domain": "biomedical", "text": "single-cell RNA sequencing batch correction", "gold_intent": "technical_method"},
+    {"id": "b02", "domain": "biomedical", "text": "protein structure prediction AlphaFold review", "gold_intent": "survey"},
+    {"id": "b03", "domain": "biomedical", "text": "CRISPR off-target detection recent advances", "gold_intent": "recent_progress"},
+    {"id": "x01", "domain": "graphics", "text": "history of seminal ray tracing papers", "gold_intent": "historical_foundation"}
+  ]
+}

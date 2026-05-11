@@ -10,12 +10,18 @@ from typing import Any
 
 import requests
 
-from .canonicality import compute_canonicality, infer_survey_context_flag
+from .canonicality import (
+    anchor_proximity_strength_normalized,
+    compute_canonicality,
+    compute_query_conditioned_canonicality,
+    infer_survey_context_flag,
+)
 from .citation_context import enrich_graph_with_citation_snippets
 from .domain_mapper import domain_from_openalex_payload, domain_from_venue_name
 from .discovery import RelationParams, SuggestionEngine, score_expand_relations
 from .graph_scores import compute_graph_score_bundle
-from .intent_classifier import classify_query
+from .explainability import build_why_it_matters, ensure_why_it_matters_top5
+from .intent_classifier import QueryIntent, classify_query
 from .evaluation import QualityReport, build_quality_report
 from .feedback import FeedbackStore
 from .graph import CitationGraphBuilder, GraphSnapshot, SemanticMetrics
@@ -56,6 +62,7 @@ _SEMANTIC_ALIGNMENT_LEXICON: tuple[str, ...] = (
 )
 
 from .ranking_diagnostics import lite_v21_observability_payload
+from .roadmap_metrics import FAILURE_TAXONOMY
 from .semantic_control import (
     aggregate_semantic_control_diagnostics,
     domain_consistency_multiplier,
@@ -64,8 +71,15 @@ from .semantic_control import (
     local_semantic_connectivity,
     normalized_drift_penalty,
     semantic_control_adjustments,
+    vocabulary_coherence_score,
 )
-from .ranking_fusion import compute_final_score, fusion_weights_for_intent
+from .ranking_fusion import (
+    RECENCY_TRIPLE_INTENTS,
+    apply_hardware_top10_sem_rec_graph_lock,
+    compute_final_score,
+    fusion_weights_for_intent,
+    normalize_query_intent,
+)
 from .validation import DeduplicationEngine
 from .visualization import edge_style
 
@@ -576,6 +590,89 @@ class SRGApplicationService:
         if not reasons:
             reasons.append("seed_or_discovered_candidate")
         return reasons
+
+    @staticmethod
+    def _apply_semantic_hard_floor_v2(nodes: list[dict[str, Any]], opts: dict[str, Any]) -> None:
+        """Roadmap 1.3 — demote very low semantic / intent alignment before normalization."""
+        if not bool(opts.get("lite_semantic_rank_hard_floor", True)):
+            return
+        floor = float(opts.get("semantic_rank_min_score", 0.25) or 0.25)
+        mult = float(opts.get("below_semantic_floor_multiplier", 0.4) or 0.4)
+        floor = max(0.0, min(0.45, floor))
+        mult = max(0.25, min(1.0, mult))
+        for n in nodes:
+            sem = float(n.get("semantic_score", 0.0) or 0.0)
+            ins = float(n.get("intent_similarity") or sem)
+            m = max(sem, ins)
+            if m < floor:
+                n["below_semantic_floor"] = True
+                n["relevance_raw"] = float(n.get("relevance_raw", 0.0)) * mult
+            else:
+                n["below_semantic_floor"] = False
+
+    @staticmethod
+    def _apply_foundational_eligibility_flags(nodes: list[dict[str, Any]], opts: dict[str, Any]) -> None:
+        """Roadmap 2.2 — gold hubs must meet semantic + anchor proximity."""
+        if not bool(opts.get("lite_foundational_eligibility_rules", True)):
+            for n in nodes:
+                n["foundational_eligible"] = bool(n.get("is_foundational_hub"))
+            return
+        f_sem = float(opts.get("foundational_min_semantic_score", 0.35) or 0.35)
+        f_int = float(opts.get("foundational_min_intent_similarity", 0.30) or 0.30)
+        mx_h = int(opts.get("foundational_max_anchor_hops", 3) or 3)
+        f_sem = max(0.0, min(0.6, f_sem))
+        f_int = max(0.0, min(0.6, f_int))
+        mx_h = max(1, min(20, mx_h))
+        for n in nodes:
+            if not n.get("is_foundational_hub"):
+                n["foundational_eligible"] = False
+                continue
+            sem = float(n.get("semantic_score", 0.0) or 0.0)
+            ins = float(n.get("intent_similarity") or sem)
+            hops = int(n.get("anchor_graph_hops", 99))
+            if sem < 0.25:
+                n["foundational_eligible"] = False
+                n["foundational_excluded_low_semantic"] = True
+                continue
+            n["foundational_eligible"] = bool(sem >= f_sem and ins >= f_int and hops <= mx_h)
+
+    @staticmethod
+    def _recency_alignment_score(node: dict[str, Any]) -> float:
+        """[0,1] — higher for recent publication years (roadmap RECENT_PROGRESS fusion)."""
+        y = node.get("year")
+        if not isinstance(y, int):
+            return 0.55
+        cy = datetime.utcnow().year
+        age = max(0, cy - y)
+        if age <= 2:
+            return 1.0
+        if age <= 5:
+            return 0.82
+        if age <= 10:
+            return 0.58
+        if age <= 18:
+            return 0.35
+        return 0.18
+
+    @staticmethod
+    def _apply_semantic_graph_top10_rule_a(nodes: list[dict[str, Any]], opts: dict[str, Any]) -> None:
+        """
+        Roadmap Rule A — if semantic is below the hard-floor threshold, graph-heavy scores
+        cannot keep the paper in the top-10 raw ranking slots (heavy demotion).
+        """
+        if not bool(opts.get("lite_semantic_rank_hard_floor", True)):
+            return
+        thr = float(opts.get("semantic_rank_min_score", 0.25) or 0.25)
+        thr = max(0.0, min(0.45, thr))
+        cap_mult = float(opts.get("semantic_top10_below_floor_multiplier", 0.35) or 0.35)
+        cap_mult = max(0.05, min(1.0, cap_mult))
+        ordered = sorted(nodes, key=lambda n: float(n.get("relevance_raw", 0.0)), reverse=True)
+        for n in ordered[:10]:
+            sem = float(n.get("semantic_score", 0.0) or 0.0)
+            ins = float(n.get("intent_similarity") or sem)
+            if max(sem, ins) < thr:
+                n["relevance_raw"] = float(n.get("relevance_raw", 0.0)) * cap_mult
+                n["semantic_top10_graph_capped"] = True
 
     def _broaden_seed_pool(
         self,
@@ -1269,6 +1366,8 @@ class SRGApplicationService:
         node_ids_list = [n["id"] for n in graph_json["nodes"]]
         v2_intent = ""
         v2_confidence = 0.0
+        v2_intent_distribution: dict[str, Any] = {}
+        v2_hardware_recency_boost = False
         v2_fusion = (0.6, 0.3, 0.1)
         pr_n: dict[str, float] = {}
         eq_n: dict[str, float] = {}
@@ -1281,6 +1380,7 @@ class SRGApplicationService:
         graph_for_fusion: dict[str, float] = {}
         lite_semantic_control = bool(opts.get("lite_semantic_control", True))
         lite_intent_verification = bool(opts.get("lite_intent_verification", True))
+        lite_query_conditioned_canonicality = bool(opts.get("lite_query_conditioned_canonicality", True))
         intent_verification_meta: dict[str, Any] = {}
         sc_gamma = float(opts.get("semantic_control_local_gamma", 0.09) or 0.09)
         sc_delta = float(opts.get("semantic_control_drift_lambda", 0.12) or 0.12)
@@ -1293,6 +1393,10 @@ class SRGApplicationService:
             icr = classify_query(qtext_for_v2, {})
             v2_intent = str(icr.get("intent") or "")
             v2_confidence = float(icr.get("confidence") or 0.0)
+            v2_intent_distribution = dict(
+                icr.get("intent_distribution") or icr.get("distribution") or {}
+            )
+            v2_hardware_recency_boost = bool(icr.get("hardware_recency_fusion_boost"))
             v2_fusion = fusion_weights_for_intent(v2_intent)
             hop_for_bundle = hop_map if hop_map else None
             pr_n, eq_n, ctx_n, graph_combined = compute_graph_score_bundle(
@@ -1329,16 +1433,44 @@ class SRGApplicationService:
                 node["graph_score_structural_raw"] = round(g_struct, 4)
                 inbound = SRGApplicationService._openalex_cited_by_count(merged_by_id, pid)
                 survey_ctx = infer_survey_context_flag(node)
-                canon = compute_canonicality(
-                    node,
-                    qtext_for_v2,
-                    v2_intent,
-                    inbound_citations=inbound,
-                    is_in_survey_context=survey_ctx,
-                )
-                fused = compute_final_score(sem, gscore, canon, v2_intent)
                 hops = int(hop_map.get(pid, 99))
                 node["anchor_graph_hops"] = hops
+                vocab_c = vocabulary_coherence_score(qtext_for_v2, node)
+                node["vocabulary_coherence"] = round(float(vocab_c), 4)
+                if lite_query_conditioned_canonicality:
+                    canon = compute_query_conditioned_canonicality(
+                        node,
+                        qtext_for_v2,
+                        v2_intent,
+                        inbound_citations=inbound,
+                        is_in_survey_context=survey_ctx,
+                        anchor_hops=hops,
+                        semantic_alignment=sem,
+                        vocabulary_coherence=vocab_c,
+                    )
+                else:
+                    canon = compute_canonicality(
+                        node,
+                        qtext_for_v2,
+                        v2_intent,
+                        inbound_citations=inbound,
+                        is_in_survey_context=survey_ctx,
+                    )
+                _ni = normalize_query_intent(v2_intent)
+                recency_v = (
+                    SRGApplicationService._recency_alignment_score(node)
+                    if _ni in RECENCY_TRIPLE_INTENTS
+                    else None
+                )
+                fused = compute_final_score(
+                    sem,
+                    gscore,
+                    canon,
+                    v2_intent,
+                    recency=recency_v,
+                    intent_distribution=v2_intent_distribution,
+                    hardware_recency_boost=v2_hardware_recency_boost,
+                )
                 drift_n = normalized_drift_penalty(hops)
                 loc_c = float(local_conn_map.get(pid, 0.45))
                 dom_m = domain_consistency_multiplier(node.get("domain"), query_domains_v2)
@@ -1370,6 +1502,8 @@ class SRGApplicationService:
                 node["semantic_fit_score"] = round(float(sem), 4)
                 if metadata_only_mode:
                     raw *= 0.72
+                if _ni == QueryIntent.HARDWARE_SYSTEM:
+                    raw += 0.06 * anchor_proximity_strength_normalized(hops)
                 node["relevance_raw"] = raw
                 node["final_score"] = round(float(raw), 6)
                 raw_scores.append(raw)
@@ -1471,6 +1605,16 @@ class SRGApplicationService:
                 query_profile=query_profile,
             )
             raw_scores = [float(n["relevance_raw"]) for n in graph_json["nodes"]]
+        if lite_v2_ranking:
+            SRGApplicationService._apply_semantic_hard_floor_v2(graph_json["nodes"], opts)
+            SRGApplicationService._apply_semantic_graph_top10_rule_a(graph_json["nodes"], opts)
+            apply_hardware_top10_sem_rec_graph_lock(
+                graph_json["nodes"],
+                v2_intent,
+                hardware_recency_boost=v2_hardware_recency_boost,
+            )
+            SRGApplicationService._apply_foundational_eligibility_flags(graph_json["nodes"], opts)
+            raw_scores = [float(n["relevance_raw"]) for n in graph_json["nodes"]]
         max_raw = max(raw_scores) if raw_scores else 1.0
         if max_raw <= 0:
             max_raw = 1.0
@@ -1529,6 +1673,9 @@ class SRGApplicationService:
                     if promoted_count >= 2:
                         break
 
+        if lite_v2_ranking:
+            SRGApplicationService._apply_foundational_eligibility_flags(graph_json["nodes"], opts)
+
         if lite_coherence_stabilization:
             for node in graph_json["nodes"]:
                 hops = int(node.get("anchor_graph_hops", 99))
@@ -1540,6 +1687,18 @@ class SRGApplicationService:
                 else:
                     node["field_coherence_tier"] = "peripheral"
 
+        if lite_v2_ranking:
+            qt_wim = (qtext_for_v2 or "").strip() or " ".join(
+                str(t) for t in (query_profile.get("query_terms") or [])
+            )
+            for node in graph_json["nodes"]:
+                node["why_it_matters"] = build_why_it_matters(
+                    node, query_text=qt_wim, intent_label=v2_intent
+                )
+            ensure_why_it_matters_top5(
+                graph_json["nodes"], query_text=qt_wim, intent_label=v2_intent
+            )
+
         if metadata_only_mode:
             evidence_quality = "low"
         elif references_total >= 50 and evidence_edges >= 30:
@@ -1548,7 +1707,7 @@ class SRGApplicationService:
             evidence_quality = "medium"
 
         for node in graph_json["nodes"]:
-            if node.get("is_foundational_hub"):
+            if node.get("is_foundational_hub") and node.get("foundational_eligible", True):
                 node["viz_color"] = "#D4AF37"
                 node["viz_size"] = 44
             elif node.get("is_missing_link_candidate"):
@@ -1606,6 +1765,18 @@ class SRGApplicationService:
             v21_diag["intent_verification"] = {
                 "enabled": lite_intent_verification and bool((qtext_for_v2 or "").strip()),
                 **intent_verification_meta,
+            }
+            v21_diag["roadmap"] = {
+                "failure_taxonomy": list(FAILURE_TAXONOMY),
+                "lite_query_conditioned_canonicality": lite_query_conditioned_canonicality,
+                "lite_semantic_rank_hard_floor": bool(opts.get("lite_semantic_rank_hard_floor", True)),
+                "lite_foundational_eligibility_rules": bool(opts.get("lite_foundational_eligibility_rules", True)),
+            }
+            v21_diag["roadmap_flags"] = {
+                "query_conditioned_canonicality": bool(lite_query_conditioned_canonicality),
+                "semantic_hard_floor": bool(opts.get("lite_semantic_rank_hard_floor", True)),
+                "foundational_filtering": bool(opts.get("lite_foundational_eligibility_rules", True)),
+                "clean_export_mode": bool(opts.get("export_clean_reading_mode", True)),
             }
         retrieval_quality: dict[str, Any] = {
             "warnings": rq_warnings,
@@ -1732,6 +1903,9 @@ class SRGApplicationService:
                     **query_profile,
                     "intent_mode_v2": v2_intent,
                     "intent_confidence_v2": v2_confidence,
+                    "intent_distribution_v2": v2_intent_distribution,
+                    "distribution": v2_intent_distribution,
+                    "hardware_recency_fusion_boost": v2_hardware_recency_boost,
                     "query_inferred_domains": sorted(query_domains_v2),
                 }
                 if lite_v2_ranking
@@ -1784,6 +1958,8 @@ class SRGApplicationService:
         qdom = infer_query_domains(qstrip)
         icr = classify_query(qstrip, {})
         intent = str(icr.get("intent") or "")
+        idist = dict(icr.get("intent_distribution") or icr.get("distribution") or {})
+        hw_boost = bool(icr.get("hardware_recency_fusion_boost"))
         gamma, delta = 0.09, 0.12
         ranked: list[tuple[float, dict[str, Any]]] = []
         for node in nodes:
@@ -1798,7 +1974,21 @@ class SRGApplicationService:
                 inbound_citations=inbound,
                 is_in_survey_context=infer_survey_context_flag(node),
             )
-            fused = compute_final_score(sem, gs, canon, intent)
+            _ni_r = normalize_query_intent(intent)
+            recency_v = (
+                SRGApplicationService._recency_alignment_score(node)
+                if _ni_r in RECENCY_TRIPLE_INTENTS
+                else None
+            )
+            fused = compute_final_score(
+                sem,
+                gs,
+                canon,
+                intent,
+                recency=recency_v,
+                intent_distribution=idist,
+                hardware_recency_boost=hw_boost,
+            )
             dom_m = domain_consistency_multiplier(node.get("domain"), qdom)
             if semantic_control and hop_map:
                 drift_n = normalized_drift_penalty(int(hop_map.get(pid, 99)))
@@ -2545,13 +2735,26 @@ class SRGApplicationService:
 
     @staticmethod
     def _assign_foundational_graph_layout(nodes: list[dict[str, Any]]) -> None:
-        """Pin bright-gold foundational hubs near the graph origin (vis.js x/y)."""
+        """
+        Pin bright-gold foundational hubs near the graph origin (vis.js x/y).
+
+        PR G2 — layout ordering is intentionally **not** the same comparator as
+        general relevance ranking (uses semantic + intent + hops, not degree).
+        """
         import math
 
-        hubs = [n for n in nodes if n.get("is_foundational_hub")]
+        hubs = [n for n in nodes if n.get("is_foundational_hub") and n.get("foundational_eligible", True)]
         if not hubs:
             return
-        hubs.sort(key=lambda n: int(n.get("citation_count", 0)), reverse=True)
+        # PR C2 — layout order uses semantic + intent + proximity, not graph degree / citation_count.
+        hubs.sort(
+            key=lambda n: (
+                float(n.get("semantic_score", 0.0) or 0.0)
+                + float(n.get("intent_similarity") or n.get("semantic_score", 0.0) or 0.0),
+                -int(n.get("anchor_graph_hops", 99)),
+            ),
+            reverse=True,
+        )
         hubs[0]["viz_x"] = 0.0
         hubs[0]["viz_y"] = 0.0
         hubs[0]["viz_physics_fixed"] = True

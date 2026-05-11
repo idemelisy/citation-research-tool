@@ -260,11 +260,12 @@ def _uploaded_pdf_titles_citing(payload: dict[str, Any], target_id: str) -> list
 
 def _node_from_payload(node: dict[str, Any]) -> Node:
     label = (node["title"][:40] + "...") if len(node["title"]) > 40 else node["title"]
+    is_fh = bool(node.get("is_foundational_hub")) and bool(node.get("foundational_eligible", True))
     sz = int(
         node.get("viz_size")
         or (
             44
-            if node.get("is_foundational_hub")
+            if is_fh
             else (
                 30
                 if node.get("is_missing_link_candidate")
@@ -274,7 +275,7 @@ def _node_from_payload(node: dict[str, Any]) -> Node:
     )
     col = node.get("viz_color") or (
         "#D4AF37"
-        if node.get("is_foundational_hub")
+        if is_fh
         else (
             "#CA8A04"
             if node.get("is_missing_link_candidate")
@@ -287,7 +288,7 @@ def _node_from_payload(node: dict[str, Any]) -> Node:
     )
     grp = (
         "foundational"
-        if node.get("is_foundational_hub")
+        if is_fh
         else (
             "missing_link"
             if node.get("is_missing_link_candidate")
@@ -331,11 +332,19 @@ def _paper_map(papers: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {p["id"]: p for p in papers}
 
 
-def _importance_score_for_ui(paper: dict[str, Any]) -> float:
-    rel = float(paper.get("relevance_diverse_norm", paper.get("relevance_norm", 0.0)) or 0.0)
-    cc = float(paper.get("citation_count", 0) or 0.0)
-    missing = float(paper.get("missing_link_score", 0) or 0.0)
-    return rel * 2.0 + cc * 0.1 + missing * 0.25
+def _importance_score_for_ui(
+    paper: dict[str, Any],
+    *,
+    intent_mode_v2: str | None = None,
+    query_text: str | None = None,
+) -> float:
+    from .synthesis_export import paper_reading_order_score
+
+    return paper_reading_order_score(
+        paper,
+        intent_mode_v2=intent_mode_v2,
+        query_text=query_text,
+    )
 
 
 def _is_probable_main_dpo_paper(paper: dict[str, Any]) -> bool:
@@ -857,7 +866,16 @@ def run_streamlit_ui() -> None:
             "**Amber** — Missing-link candidate (co-cited by several local PDFs). "
             "**Edges:** solid blue tones = stronger citation context; dashed = weaker / potential."
         )
-        ranked_now = sorted(payload.get("papers") or [], key=_importance_score_for_ui, reverse=True)
+        _qp = payload.get("query_profile") or {}
+        _iv2 = _qp.get("intent_mode_v2")
+        _qt = (_qp.get("query_text") or "").strip()
+        ranked_now = sorted(
+            payload.get("papers") or [],
+            key=lambda p: _importance_score_for_ui(
+                p, intent_mode_v2=_iv2, query_text=_qt or None
+            ),
+            reverse=True,
+        )
         if ranked_now:
             st.markdown("### Most important papers in current graph")
             for i, p in enumerate(ranked_now[:10], start=1):
@@ -865,7 +883,7 @@ def run_streamlit_ui() -> None:
                 reasons = ", ".join((p.get("inclusion_reasons") or [])[:3])
                 st.write(
                     f"{i}. {p.get('title', '')} (`{p.get('id')}`) "
-                    f"— importance={_importance_score_for_ui(p):.2f}, links={int(p.get('citation_count', 0) or 0)}, "
+                    f"— importance={_importance_score_for_ui(p, intent_mode_v2=_iv2, query_text=_qt or None):.2f}, links={int(p.get('citation_count', 0) or 0)}, "
                     f"why={reasons}{marker}"
                 )
             if not any(_is_probable_main_dpo_paper(p) for p in ranked_now):
