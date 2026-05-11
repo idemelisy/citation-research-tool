@@ -402,8 +402,33 @@ def build_markdown_report(
     topic_groups = group_papers_query_aware_topics(papers, qp)
     papers_with_refs = [p for p in papers if isinstance(p.get("references"), list) and len(p.get("references")) > 0]
 
+    lite_ux = payload.get("lite_ux") if isinstance(payload.get("lite_ux"), dict) else {}
+    start_entries = lite_ux.get("start_here") or []
+    branches_lite = lite_ux.get("branches") or []
+
     lines.append("## Reading guide\n" if not clean else "## Reading list\n")
-    if ranked_papers:
+    if start_entries:
+        lines.append("### Start here\n")
+        for it in start_entries:
+            if not isinstance(it, dict):
+                continue
+            pid = str(it.get("paper_id") or "").strip()
+            ttl = (it.get("title") or pid).strip()
+            yr = it.get("year")
+            yr_s = f" ({yr})" if yr is not None else ""
+            tags = it.get("tags") or []
+            tg = ", ".join(str(t) for t in tags if t) if isinstance(tags, list) else ""
+            ol = (it.get("one_line") or "").strip()
+            tags_suffix = f" · _{tg}_" if tg else ""
+            lines.append(f"- **{ttl}**{yr_s}{tags_suffix}")
+            if ol:
+                lines.append(f"  - {ol}")
+        lines.append("")
+
+    sh_ids = {str(e.get("paper_id") or "").strip() for e in start_entries if isinstance(e, dict)}
+    ranked_for_list = [p for p in ranked_papers if str(p.get("id") or "") not in sh_ids][:10] if sh_ids else ranked_papers[:10]
+
+    if ranked_for_list:
         if not clean:
             hw_note = (
                 " Hardware-mode queries down-weight raw graph degree, add recency + GPU/pipeline title cues, "
@@ -418,7 +443,9 @@ def build_markdown_report(
             )
         qt_for_why = (qp.get("query_text") or "").strip()
         intent_for_why = str(qp.get("intent_mode_v2") or qp.get("query_intent") or "exploratory")
-        for idx, p in enumerate(ranked_papers[:10], start=1):
+        if sh_ids:
+            lines.append("### More papers by importance\n" if clean else "### Extended ranked pool\n")
+        for idx, p in enumerate(ranked_for_list, start=1):
             if clean:
                 lines.append(f"### {idx}. {p.get('title', '')}")
                 w = why_it_matters_one_line(
@@ -434,14 +461,29 @@ def build_markdown_report(
                     f"graph_links={int(p.get('citation_count', 0) or 0)}"
                 )
     else:
-        lines.append("_No papers in graph._")
+        if not ranked_papers and not start_entries:
+            lines.append("_No papers in graph._")
+        elif sh_ids and ranked_papers:
+            lines.append("_Further importance-ranked papers are omitted here to avoid duplicating Start here._\n")
     lines.append("")
 
-    lines.append("## Topic separation\n")
-    if topic_groups:
-        for topic, rows in topic_groups.items():
-            lines.append(f"### {topic}\n")
-            for p in rows[:8]:
+    if branches_lite:
+        lines.append("## Literature branches\n")
+        for br in branches_lite:
+            if not isinstance(br, dict):
+                continue
+            label = (br.get("label") or "Branch").strip()
+            lines.append(f"### {label}\n")
+            summ = (br.get("summary") or "").strip()
+            if summ:
+                lines.append(f"_{summ}_\n")
+            whyb = (br.get("why_included") or "").strip()
+            if whyb:
+                lines.append(f"- _Why this branch appears_: {whyb}\n")
+            for pid in (br.get("paper_ids") or [])[:8]:
+                p = by_id.get(str(pid))
+                if not p:
+                    continue
                 if clean:
                     lines.append(f"- **{p.get('title', '')}**")
                 else:
@@ -450,11 +492,80 @@ def build_markdown_report(
                         f"- **{p.get('title', '')}** (`{p.get('id')}`) "
                         f"(importance={imp:.3f})"
                     )
-            if len(rows) > 8:
-                lines.append(f"- _... {len(rows) - 8} more in this topic_")
+            pids = br.get("paper_ids") or []
+            if isinstance(pids, list) and len(pids) > 8:
+                lines.append(f"- _... {len(pids) - 8} more in this branch_")
             lines.append("")
     else:
-        lines.append("_No topic groups found._\n")
+        lines.append("## Topic separation\n")
+        if topic_groups:
+            for topic, rows in topic_groups.items():
+                lines.append(f"### {topic}\n")
+                for p in rows[:8]:
+                    if clean:
+                        lines.append(f"- **{p.get('title', '')}**")
+                    else:
+                        imp = paper_reading_order_score(p, intent_mode_v2=iv2_sort, query_text=qt_sort)
+                        lines.append(
+                            f"- **{p.get('title', '')}** (`{p.get('id')}`) "
+                            f"(importance={imp:.3f})"
+                        )
+                if len(rows) > 8:
+                    lines.append(f"- _... {len(rows) - 8} more in this topic_")
+                lines.append("")
+        else:
+            lines.append("_No topic groups found._\n")
+
+    reading_paths_md = lite_ux.get("reading_paths") if isinstance(lite_ux.get("reading_paths"), list) else []
+    if reading_paths_md:
+        lines.append("## Suggested reading paths\n")
+        for rp in reading_paths_md[:3]:
+            if not isinstance(rp, dict):
+                continue
+            lines.append(f"### {rp.get('label', 'Path')}\n")
+            if rp.get("rationale"):
+                lines.append(f"_{rp.get('rationale')}_\n")
+            for j, pid in enumerate(rp.get("paper_ids") or [], start=1):
+                p = by_id.get(str(pid))
+                if not p:
+                    continue
+                if clean:
+                    lines.append(f"{j}. **{p.get('title', '')}**")
+                else:
+                    lines.append(f"{j}. **{p.get('title', '')}** (`{pid}`)")
+            lines.append("")
+
+    rh_md = lite_ux.get("retrieval_health") if isinstance(lite_ux.get("retrieval_health"), dict) else {}
+    sigs = rh_md.get("signals") if isinstance(rh_md.get("signals"), list) else []
+    if sigs:
+        lines.append("## Retrieval health\n")
+        lines.append("| Signal | Status | Notes |")
+        lines.append("| --- | --- | --- |")
+        for sig in sigs[:6]:
+            if not isinstance(sig, dict):
+                continue
+            lab = str(sig.get("label", "")).replace("|", "/")
+            lv = str(sig.get("level", "")).replace("|", "/")
+            det = str(sig.get("detail", "")).replace("|", "/")[:120]
+            lines.append(f"| {lab} | {lv} | {det} |")
+        lines.append("")
+        esm = rh_md.get("empty_state") if isinstance(rh_md.get("empty_state"), dict) else {}
+        if esm.get("active"):
+            lines.append(f"_{esm.get('message', '')}_\n")
+            for s in esm.get("suggestions") or []:
+                lines.append(f"- {s}")
+            lines.append("")
+
+    ins_md = lite_ux.get("insights") if isinstance(lite_ux.get("insights"), list) else []
+    if ins_md:
+        lines.append("## Insights\n")
+        for ins in ins_md:
+            if not isinstance(ins, dict):
+                continue
+            lines.append(f"### {ins.get('title', 'Insight')}\n")
+            if ins.get("body"):
+                lines.append(f"{ins.get('body')}\n")
+            lines.append("")
 
     lines.append("## Reference coverage\n")
     if clean:

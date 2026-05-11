@@ -1,0 +1,296 @@
+Phase 1 — Critical UX Stabilization
+
+These are the highest ROI changes.
+
+1. Add a “Start Here” section
+Impact: Extremely high
+Difficulty: Low
+Problem
+
+Users currently see:
+
+10+ papers,
+clusters,
+statistics,
+trends,
+graph info.
+
+This creates cognitive overload immediately.
+
+Solution
+
+Create a dedicated section:
+
+Start Here
+
+Only show:
+
+3–5 papers max.
+
+Each card should include:
+
+Title
+Year
+1-line why it matters
+Optional tags:
+Foundational
+Recent
+Bridge
+Survey
+Atomic tasks
+ Add a “start_here” pipeline output
+ Pick top 3–5 diversified papers
+ Prevent near-duplicate paper selection
+ Add one-sentence summaries
+ Collapse all other sections initially
+2. Replace “Topic Separation” with “Literature Branches”
+Impact: Extremely high
+Difficulty: Medium
+Problem
+
+Current labels feel synthetic:
+
+“Preference Language Optimization”
+“Optimization Direct Preference”
+
+This destroys trust.
+
+Solution
+
+Rename conceptually:
+
+Literature Branches
+
+Then generate:
+
+representative title,
+representative papers,
+optional summary.
+Atomic tasks
+ Rename section
+ Select central paper per cluster
+ Generate label from central papers
+ Remove repeated-token labels
+
+ Add:
+
+“This branch focuses on…”
+
+Simple heuristic that works surprisingly well
+
+Take:
+
+most central paper titles,
+most frequent meaningful nouns,
+remove query terms.
+
+This alone will look MUCH better.
+
+3. Add “Why this branch exists”
+Impact: Very high
+Difficulty: Low-Medium
+Problem
+
+Users don’t understand:
+
+“Why are recommender systems here?”
+
+Solution
+
+At cluster level:
+
+“This branch appears because sequential recommendation literature heavily uses preference optimization terminology and related objectives.”
+
+Now noise becomes explainable.
+
+Atomic tasks
+ Detect lexical overlap terms
+ Detect shared citations
+ Generate branch explanation template
+ Add “why included” section
+4. Add Reading Paths
+Impact: Extremely high
+Difficulty: Medium
+
+This is probably the single best feature for perceived intelligence.
+
+Example
+Suggested Reading Path
+Beginner path
+InstructGPT
+DPO
+IPO
+ORPO
+Cross-domain path
+DPO
+Recommendation adaptation
+Protein alignment adaptation
+Atomic tasks
+ Build citation-chain traversal
+ Prefer chronological coherence
+ Penalize branch switching
+ Generate 2–3 reading paths
+ Add path labels
+5. Add Retrieval Health Indicators
+Impact: Very high
+Difficulty: Low
+
+This massively improves trust.
+
+Example
+Signal	Status
+Query ambiguity	High
+Citation density	Strong
+Metadata quality	Moderate
+Branch consistency	Medium
+Atomic tasks
+ Compute ambiguity score
+ Compute cluster entropy
+ Compute metadata completeness
+ Compute citation density
+ Render compact badges
+Phase 2 — Visual Trust Improvements
+6. Visually distinguish anchors
+Impact: Huge
+Difficulty: Low
+
+Users MUST know:
+
+what was seeded,
+what was discovered.
+Atomic tasks
+ Add anchor badge
+ Add discovered-via-citation badge
+ Add broadened-via-semantic badge
+ Add hover explanations
+7. Add collapsible sections
+Impact: Huge
+Difficulty: Very low
+
+Current output is too dense.
+
+Atomic tasks
+ Collapse trends by default
+ Collapse metadata statistics
+ Collapse graph diagnostics
+ Persist expansion state
+8. Improve paper cards
+Impact: Huge
+Difficulty: Medium
+
+Your papers need stronger visual hierarchy.
+
+Add:
+Year
+Citation count
+Tags
+Why important
+Relation to query
+Branch membership
+Atomic tasks
+ Design card layout
+ Add metadata badges
+ Add importance tag
+ Add hover details
+ Add open-paper action
+Phase 3 — Exploration Quality
+9. Add “unexpected but relevant”
+Impact: High
+Difficulty: Medium
+
+Turn retrieval weirdness into discovery.
+
+Example
+Unexpected Connections
+
+Recommendation systems literature appears connected through preference modeling objectives.
+
+Atomic tasks
+ Detect distant-but-connected clusters
+ Detect low-overlap/high-citation links
+ Surface bridge papers
+ Add “why surprising” template
+10. Add “Foundational vs Frontier”
+Impact: High
+Difficulty: Low
+
+This is more intuitive than raw ranking.
+
+Atomic tasks
+ Split papers by publication period
+ Detect high-degree older nodes
+ Detect recent rapidly connected nodes
+ Add visual distinction
+Phase 4 — Product Polish
+11. Improve language quality
+Impact: Very high
+Difficulty: Low
+
+Current wording feels system-generated.
+
+Replace:
+“High semantic match”
+“Anchor overlap”
+
+with:
+
+“Core paper in this literature”
+“Directly connected to your starting papers”
+“Frequently cited alongside DPO work”
+“Recent extension of the method”
+Atomic tasks
+ Create explanation template library
+ Add phrase diversity
+ Remove repeated sentence structures
+ Add role-based descriptions
+12. Add empty-state handling
+Impact: High
+Difficulty: Low
+
+When retrieval fails:
+don’t dump garbage.
+
+Example
+
+“This query appears ambiguous or weakly represented in scholarly metadata.”
+
+Then suggest:
+
+adding DOI,
+adding field terms,
+using paper title.
+Atomic tasks
+ Detect low-confidence retrieval
+ Detect sparse graph
+ Detect high ambiguity
+ Add recovery suggestions
+Highest ROI order
+
+If you want optimal sequencing:
+
+Week 1
+Start Here
+Collapsible sections
+Better branch naming
+Retrieval health
+Week 2
+Reading paths
+Anchor visualization
+Better paper cards
+Week 3
+Unexpected connections
+Foundational vs frontier
+Language polish
+Most important principle
+
+Do NOT try to:
+
+increase intelligence,
+solve semantics,
+fix all retrieval failures.
+
+Your next milestone is:
+
+making users feel oriented.
+
+That is a UX/design problem now, not primarily an IR problem.

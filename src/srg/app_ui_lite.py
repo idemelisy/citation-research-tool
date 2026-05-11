@@ -17,6 +17,7 @@ from streamlit_agraph import Config, agraph
 if __package__ in (None, ""):
     sys.path.append(str(Path(__file__).resolve().parents[1]))
     from srg.api_adapter import SRGApplicationService
+    from srg.lite_ux import start_here_tags_for_paper
     from srg.app_ui import (
         _filter_graph_for_display,
         _importance_score_for_ui,
@@ -25,9 +26,11 @@ if __package__ in (None, ""):
         _related_edges,
         _to_agraph_payload,
     )
+    from srg.explainability import why_it_matters_one_line
     from srg.synthesis_export import build_bibtex, build_markdown_report
 else:
     from .api_adapter import SRGApplicationService
+    from .lite_ux import start_here_tags_for_paper
     from .app_ui import (
         _filter_graph_for_display,
         _importance_score_for_ui,
@@ -36,6 +39,7 @@ else:
         _related_edges,
         _to_agraph_payload,
     )
+    from .explainability import why_it_matters_one_line
     from .synthesis_export import build_bibtex, build_markdown_report
 
 # Field-aware discovery phase: citation neighborhoods first; lexical/topic signals secondary.
@@ -193,6 +197,36 @@ def _branch_description(branch_label: str) -> str:
     return "Papers in this direction appear together in the citation neighborhood."
 
 
+def _branch_label_for_paper_id(pid: str, branches_payload: list[dict[str, Any]]) -> str:
+    for b in branches_payload:
+        if not isinstance(b, dict):
+            continue
+        pids = [str(x) for x in (b.get("paper_ids") or [])]
+        if str(pid) in pids:
+            return str(b.get("label") or "").strip()
+    return ""
+
+
+def _literature_branch_rows(
+    branches_payload: list[dict[str, Any]],
+    fallback_branches: dict[str, list[dict[str, Any]]],
+    pmap: dict[str, dict[str, Any]],
+) -> list[tuple[str, list[dict[str, Any]], str, str]]:
+    if branches_payload:
+        rows: list[tuple[str, list[dict[str, Any]], str, str]] = []
+        for b in branches_payload[:12]:
+            if not isinstance(b, dict):
+                continue
+            label = str(b.get("label") or "Literature branch").strip()
+            plist = [pmap[pid] for pid in (b.get("paper_ids") or []) if pmap.get(pid)]
+            summ = str(b.get("summary") or "").strip()
+            why = str(b.get("why_included") or "").strip()
+            if plist:
+                rows.append((label, plist, summ, why))
+        return rows
+    return [(k, v, _branch_description(k), "") for k, v in list(fallback_branches.items())[:12]]
+
+
 def _trust_explanation_lines(paper: dict[str, Any]) -> list[str]:
     """Trust / explainability — citation-backed placement and field position (coherence phase)."""
     lines: list[str] = []
@@ -204,11 +238,11 @@ def _trust_explanation_lines(paper: dict[str, Any]) -> list[str]:
                 lines.append(p)
     tier = (paper.get("field_coherence_tier") or "").strip().lower()
     if tier == "core":
-        lines.append("Field position: core — close to anchors or strong citation ties to the query literature.")
+        lines.append("Map position: core — close to your anchors or strongly tied to the query literature.")
     elif tier == "near_core":
-        lines.append("Field position: near-core — connected within one–two citation steps of anchors.")
+        lines.append("Map position: near-core — one–two citation steps from anchors.")
     elif tier == "peripheral":
-        lines.append("Field position: peripheral — farther from anchors; verify relevance before deep reading.")
+        lines.append("Map position: peripheral — farther out; skim before committing deep reading time.")
     hops = paper.get("anchor_graph_hops")
     if hops is not None and int(hops) < 99:
         lines.append(f"Citation hops from query seeds (undirected): {int(hops)}.")
@@ -218,17 +252,17 @@ def _trust_explanation_lines(paper: dict[str, Any]) -> list[str]:
     dh = int(paper.get("relation_direct_hits") or 0)
     origin = (paper.get("seed_origin") or "").strip()
     if origin == "api_search":
-        lines.append("Included as a query anchor from search (not only semantic similarity).")
+        lines.append("Seeded from your query search (not a lone semantic hit).")
     if dh > 0 and rel > 0:
-        lines.append("Direct citation relationship to an anchor paper in this map.")
+        lines.append("Direct citation link to a starting paper in this map.")
     elif coc >= 2:
-        lines.append("Strong co-citation overlap with papers near your anchors (shared citing community).")
+        lines.append("Often cited together with work near your anchors (shared citing community).")
     elif cou >= 2:
-        lines.append("Shares many references with anchor papers (bibliographic coupling — same conversation).")
+        lines.append("Overlaps references with anchor papers (same bibliographic thread).")
     elif paper.get("is_foundational_hub"):
-        lines.append("Highly cited or central in this literature slice (foundational hub).")
+        lines.append("Central in this slice — widely linked or highly cited here.")
     elif rel > 0 and paper.get("seed_origin") == "discovered":
-        lines.append("Reached through citation expansion from your anchors, ranked by research proximity.")
+        lines.append("Reached through citation expansion from your anchors.")
     isim = paper.get("intent_similarity")
     if isim is not None:
         try:
@@ -380,7 +414,10 @@ def run_srg_lite_ui() -> None:
             with st.spinner("Resolving multiple anchors and expanding citation neighborhoods…"):
                 seeds = service.discover_from_query(qq, text_search_backend="openalex")
             if not seeds:
-                st.warning("No papers matched that input. Try different wording or a specific DOI.")
+                st.warning(
+                    "No papers matched that input. The phrase may be too vague for OpenAlex, or outside coverage. "
+                    "Try a DOI (`10....`), an arXiv id (`1234.5678`), or paste an exact paper title."
+                )
             else:
                 with st.spinner("Building citation graph: references, 2-hop expansion, coupling…"):
                     st.session_state.payload = service.run_pipeline(
@@ -400,32 +437,71 @@ def run_srg_lite_ui() -> None:
         )
         return
 
+    pin_adv = st.checkbox(
+        "Pin advanced sections open",
+        value=bool(st.session_state.get("lite_pin_adv", False)),
+        key="lite_pin_adv",
+    )
+
     rq = payload.get("retrieval_quality") or {}
     for msg in rq.get("warnings") or []:
         st.warning(msg)
     v21_rq = rq.get("v2_1_diagnostics") or {}
     sc_rq = v21_rq.get("semantic_control") or {}
-    if sc_rq.get("enabled"):
-        doms = sc_rq.get("query_inferred_domains") or []
-        dom_txt = ", ".join(doms) if doms else "none inferred"
-        st.caption(
-            f"Semantic control (anti-drift): δ={sc_rq.get('semantic_control_drift_lambda')}, "
-            f"γ={sc_rq.get('semantic_control_local_gamma')}; inferred query domains: {dom_txt}."
-        )
     iv_rq = v21_rq.get("intent_verification") or {}
-    if iv_rq.get("enabled") and iv_rq.get("backend"):
-        be = iv_rq.get("backend")
-        md = iv_rq.get("model") or "n/a"
-        st.caption(
-            f"Intent verification: backend={be}, model={md}; mean query–paper intent similarity ≈ {iv_rq.get('mean_intent_similarity', '—')}."
-        )
+    if sc_rq.get("enabled") or (iv_rq.get("enabled") and iv_rq.get("backend")):
+        with st.expander("Semantic & intent diagnostics (detail)", expanded=pin_adv):
+            if sc_rq.get("enabled"):
+                doms = sc_rq.get("query_inferred_domains") or []
+                dom_txt = ", ".join(doms) if doms else "none inferred"
+                st.caption(
+                    f"Semantic control (anti-drift): δ={sc_rq.get('semantic_control_drift_lambda')}, "
+                    f"γ={sc_rq.get('semantic_control_local_gamma')}; inferred query domains: {dom_txt}."
+                )
+            if iv_rq.get("enabled") and iv_rq.get("backend"):
+                be = iv_rq.get("backend")
+                md = iv_rq.get("model") or "n/a"
+                st.caption(
+                    f"Intent verification: backend={be}, model={md}; mean query–paper intent similarity ≈ "
+                    f"{iv_rq.get('mean_intent_similarity', '—')}."
+                )
 
     papers = [p for p in (payload.get("papers") or []) if not p.get("graph_noise")]
     pmap = _paper_map(payload["papers"])
+    _lux0 = payload.get("lite_ux")
+    if not isinstance(_lux0, dict) or int(_lux0.get("version") or 0) < 2:
+        try:
+            from .lite_ux import build_lite_ux_payload
+        except ImportError:
+            from srg.lite_ux import build_lite_ux_payload  # type: ignore[no-redef]
+
+        payload["lite_ux"] = build_lite_ux_payload(payload)
+        st.session_state.payload = payload
+    lite_ux = payload.get("lite_ux") if isinstance(payload.get("lite_ux"), dict) else {}
+    branches_payload = lite_ux.get("branches") if isinstance(lite_ux.get("branches"), list) else []
+    start_entries = lite_ux.get("start_here") if isinstance(lite_ux.get("start_here"), list) else []
+    rh = lite_ux.get("retrieval_health") if isinstance(lite_ux.get("retrieval_health"), dict) else {}
+    signals = rh.get("signals") if isinstance(rh.get("signals"), list) else []
+    if signals:
+        st.subheader("Retrieval health")
+        sig_cols = st.columns(min(len(signals), 4))
+        for i, sig in enumerate(signals[:4]):
+            if not isinstance(sig, dict):
+                continue
+            with sig_cols[i % len(sig_cols)]:
+                st.markdown(f"**{sig.get('label', 'Signal')}**  \n`{sig.get('level', '—')}`")
+                if sig.get("detail"):
+                    st.caption(str(sig["detail"])[:140])
+        es = rh.get("empty_state") if isinstance(rh.get("empty_state"), dict) else {}
+        if es.get("active"):
+            st.warning(es.get("message") or "This slice looks weak or ambiguous — proceed carefully.")
+            for s in es.get("suggestions") or []:
+                st.caption(f"· {s}")
+
     ar_notes = rq.get("anchor_resolution_notes") or []
     req_seeds = payload.get("requested_seeds") or []
     if ar_notes or req_seeds:
-        with st.expander("Anchor seeds (retrieval diagnostics)", expanded=False):
+        with st.expander("Anchor seeds (retrieval diagnostics)", expanded=pin_adv):
             st.caption(
                 "These are the works used to anchor citation expansion. If the list looks off-topic, "
                 "results will follow that neighborhood — try a DOI, arXiv id, or a narrower phrase."
@@ -443,12 +519,25 @@ def run_srg_lite_ui() -> None:
                         st.markdown(f"{i}. `{prov}:{sid}` · _{origin}_ — **{ttl[:140]}{'…' if len(ttl) > 140 else ''}**")
                     else:
                         st.markdown(f"{i}. `{prov}:{sid}` · _{origin}_ — _(title not in current graph slice)_")
-    branches = _research_branches_for_lite(papers, payload)
+    branches_fb = _research_branches_for_lite(papers, payload)
+    branch_rows = _literature_branch_rows(branches_payload, branches_fb, pmap)
     foundational = [
         p for p in papers if p.get("is_foundational_hub") and p.get("foundational_eligible", True)
     ]
     recent_imp = _recent_important(papers, payload=payload)
-    start_here = _start_here_papers(payload, pmap)
+    start_here_papers = _start_here_papers(payload, pmap)
+    if start_entries:
+        sh_ordered: list[dict[str, Any]] = []
+        for it in start_entries:
+            if not isinstance(it, dict):
+                continue
+            pid = str(it.get("paper_id") or "").strip()
+            p = pmap.get(pid)
+            if p and not p.get("graph_noise"):
+                sh_ordered.append(p)
+        start_here_for_order = sh_ordered if sh_ordered else start_here_papers
+    else:
+        start_here_for_order = start_here_papers
 
     display_floor = float(payload.get("lite_display_relevance_floor") or 0.0)
     graph_display = _filter_graph_for_display(payload, display_floor, hide_weak_edges=True)
@@ -462,21 +551,127 @@ def run_srg_lite_ui() -> None:
         groups={
             "uploaded": {"color": "#1D4ED8"},
             "discovered": {"color": "#D4D4D8"},
+            "discovered_edge": {"color": "#94A3B8"},
+            "anchor_search": {"color": "#059669"},
+            "semantic_broadened": {"color": "#9333EA"},
             "missing_link": {"color": "#CA8A04"},
             "foundational": {"color": "#D4AF37"},
         },
     )
 
+    valid_start_entries = [
+        it
+        for it in (start_entries[:5] if start_entries else [])
+        if isinstance(it, dict) and str(it.get("paper_id") or "").strip()
+    ]
+    if valid_start_entries:
+        st.subheader("Start here")
+        st.caption("Curated entry points (3–5 papers), diversified across branches where possible.")
+        sh_cols = st.columns(max(len(valid_start_entries), 1))
+        for i, it in enumerate(valid_start_entries):
+            pid = str(it.get("paper_id") or "").strip()
+            p = pmap.get(pid)
+            ttl = (it.get("title") or (p.get("title") if p else "") or pid).strip()
+            yr = it.get("year")
+            yr_txt = str(yr) if yr is not None else "—"
+            tags = it.get("tags") or []
+            tag_txt = ", ".join(str(t) for t in tags if t) if isinstance(tags, list) else ""
+            one_line = (it.get("one_line") or "").strip()
+            with sh_cols[i]:
+                st.markdown(f"**{ttl[:110]}{'…' if len(ttl) > 110 else ''}**")
+                st.caption(f"Year: {yr_txt}")
+                if tag_txt:
+                    st.caption(tag_txt)
+                if one_line:
+                    st.caption(one_line)
+                if p:
+                    if st.button("Open in details", key=f"sh_top_{pid}", use_container_width=True):
+                        st.session_state.selected_node = pid
+                        st.rerun()
+                else:
+                    st.caption("_Not in current graph slice._")
+        st.divider()
+
+    reading_paths = lite_ux.get("reading_paths") if isinstance(lite_ux.get("reading_paths"), list) else []
+    if reading_paths:
+        st.subheader("Suggested reading paths")
+        st.caption("Heuristic citation-aware orderings — not a formal survey of the field.")
+        for path in reading_paths[:3]:
+            if not isinstance(path, dict):
+                continue
+            pid = str(path.get("id") or "path")
+            with st.expander(str(path.get("label") or "Reading path"), expanded=False):
+                if path.get("rationale"):
+                    st.caption(str(path["rationale"]))
+                for j, paper_id in enumerate(path.get("paper_ids") or [], start=1):
+                    pp = pmap.get(str(paper_id))
+                    t = (pp.get("title") if pp else paper_id) or paper_id
+                    short = str(t)[:88] + ("…" if len(str(t)) > 88 else "")
+                    if pp and st.button(f"{j}. {short}", key=f"rp_{pid}_{j}_{paper_id}", use_container_width=True):
+                        st.session_state.selected_node = str(paper_id)
+                        st.rerun()
+        st.divider()
+
+    insights_list = lite_ux.get("insights") if isinstance(lite_ux.get("insights"), list) else []
+    if insights_list:
+        with st.expander("Insights (exploration quality)", expanded=False):
+            _ins_first = True
+            for ins in insights_list:
+                if not isinstance(ins, dict):
+                    continue
+                if not _ins_first:
+                    st.markdown("---")
+                _ins_first = False
+                st.markdown(f"**{ins.get('title', 'Insight')}**")
+                if ins.get("body"):
+                    st.markdown(str(ins["body"]))
+                if ins.get("type") == "foundational_vs_frontier":
+                    fids = ins.get("foundational_ids") or []
+                    zids = ins.get("frontier_ids") or []
+                    ic1, ic2 = st.columns(2)
+                    with ic1:
+                        st.caption("Foundational")
+                        for fid in fids[:5]:
+                            fp = pmap.get(str(fid))
+                            if fp and st.button(
+                                (fp.get("title") or fid)[:70],
+                                key=f"ins_f_{fid}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.selected_node = str(fid)
+                                st.rerun()
+                    with ic2:
+                        st.caption("Frontier")
+                        for zid in zids[:5]:
+                            zp = pmap.get(str(zid))
+                            if zp and st.button(
+                                (zp.get("title") or zid)[:70],
+                                key=f"ins_z_{zid}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.selected_node = str(zid)
+                                st.rerun()
+        st.divider()
+
+    trends = (payload.get("discovery") or {}).get("trends") or {}
+    if trends and isinstance(trends, dict):
+        with st.expander("Trend & gap signals (discovery pass)", expanded=pin_adv):
+            for tk, tv in list(trends.items())[:24]:
+                st.caption(f"**{tk}** — {tv}")
+
     left_w, mid_w, right_w = st.columns([1.05, 2.3, 1.05], gap="medium")
 
     with left_w:
-        st.subheader("Research branches")
-        if not branches:
+        st.subheader("Literature branches")
+        if not branch_rows:
             st.caption("No branch groups yet.")
         else:
-            for branch_name, plist in list(branches.items())[:12]:
+            qp0 = payload.get("query_profile") or {}
+            for branch_name, plist, summ, why in branch_rows:
                 with st.expander(f"{branch_name} ({len(plist)})", expanded=False):
-                    st.caption(_branch_description(branch_name))
+                    st.caption(summ if summ else _branch_description(branch_name))
+                    if why:
+                        st.markdown(f"> {why}")
                     found_b = [
                         p
                         for p in plist
@@ -486,54 +681,82 @@ def run_srg_lite_ui() -> None:
                     if found_b:
                         st.markdown("**Foundational**")
                         for p in found_b:
-                            if st.button(p.get("title", "")[:72] + ("…" if len(p.get("title", "")) > 72 else ""), key=f"lb_{p['id']}", use_container_width=True):
+                            oa = _openalex_citation_count(p)
+                            tg = ", ".join(start_here_tags_for_paper(p, qp0))
+                            st.caption(
+                                f"Year {p.get('year', '—')} · Citations {oa if oa is not None else '—'}"
+                                + (f" · {tg}" if tg else "")
+                            )
+                            if st.button(
+                                p.get("title", "")[:72] + ("…" if len(p.get("title", "")) > 72 else ""),
+                                key=f"lb_{p['id']}",
+                                use_container_width=True,
+                            ):
                                 st.session_state.selected_node = p["id"]
                                 st.rerun()
                     if recent_b:
                         st.markdown("**Recent**")
                         for p in recent_b:
-                            if st.button(p.get("title", "")[:72] + ("…" if len(p.get("title", "")) > 72 else ""), key=f"lr_{p['id']}", use_container_width=True):
+                            oa = _openalex_citation_count(p)
+                            tg = ", ".join(start_here_tags_for_paper(p, qp0))
+                            st.caption(
+                                f"Year {p.get('year', '—')} · Citations {oa if oa is not None else '—'}"
+                                + (f" · {tg}" if tg else "")
+                            )
+                            if st.button(
+                                p.get("title", "")[:72] + ("…" if len(p.get("title", "")) > 72 else ""),
+                                key=f"lr_{p['id']}",
+                                use_container_width=True,
+                            ):
                                 st.session_state.selected_node = p["id"]
                                 st.rerun()
 
-        st.subheader("Guided reading")
-        st.markdown("**Start here**")
-        for p in start_here[:6]:
-            label = (p.get("title") or p["id"])[:76]
-            if st.button(label + ("…" if len(p.get("title", "") or "") > 76 else ""), key=f"sh_{p['id']}", use_container_width=True):
-                st.session_state.selected_node = p["id"]
-                st.rerun()
+        with st.expander("More entry points", expanded=pin_adv):
+            st.markdown("**Foundational**")
+            for p in foundational[:6]:
+                label = (p.get("title") or p["id"])[:76]
+                if st.button(label + ("…" if len(p.get("title", "") or "") > 76 else ""), key=f"fd_{p['id']}", use_container_width=True):
+                    st.session_state.selected_node = p["id"]
+                    st.rerun()
+            if not foundational:
+                st.caption("No foundational hubs in this slice yet — try a broader query.")
 
-        st.markdown("**Foundational**")
-        for p in foundational[:6]:
-            label = (p.get("title") or p["id"])[:76]
-            if st.button(label + ("…" if len(p.get("title", "") or "") > 76 else ""), key=f"fd_{p['id']}", use_container_width=True):
-                st.session_state.selected_node = p["id"]
-                st.rerun()
-        if not foundational:
-            st.caption("No foundational hubs in this slice yet — try a broader query.")
+            st.markdown("**Recent & influential**")
+            for p in recent_imp[:6]:
+                yr = p.get("year")
+                label = f"[{yr}] " + (p.get("title") or p["id"])[:68]
+                if st.button(label + ("…" if len(str(p.get("title", ""))) > 72 else ""), key=f"ri_{p['id']}", use_container_width=True):
+                    st.session_state.selected_node = p["id"]
+                    st.rerun()
 
-        st.markdown("**Recent & influential**")
-        for p in recent_imp[:6]:
-            yr = p.get("year")
-            label = f"[{yr}] " + (p.get("title") or p["id"])[:68]
-            if st.button(label + ("…" if len(str(p.get("title", ""))) > 72 else ""), key=f"ri_{p['id']}", use_container_width=True):
-                st.session_state.selected_node = p["id"]
-                st.rerun()
-
-        st.markdown("**Suggested reading order**")
-        for i, p in enumerate(start_here[:5], start=1):
-            st.caption(f"{i}. {(p.get('title') or p['id'])[:90]}…" if len(p.get("title", "") or "") > 90 else f"{i}. {p.get('title') or p['id']}")
+            st.markdown("**Suggested reading order**")
+            for i, p in enumerate(start_here_for_order[:5], start=1):
+                st.caption(
+                    f"{i}. {(p.get('title') or p['id'])[:90]}…"
+                    if len(p.get("title", "") or "") > 90
+                    else f"{i}. {p.get('title') or p['id']}"
+                )
 
     with mid_w:
         st.subheader("Research map")
         st.caption(
             "Curated subgraph: weak periphery and low-confidence edges hidden for readability. "
-            "Gold: foundational · Amber: bridge · Grey: neighborhood."
+            "Green: query anchors · Purple: semantic broadening · Grey: citation expansion · "
+            "Gold: foundational · Amber: bridge · Blue: PDF."
         )
         picked = agraph(nodes=nodes_g, edges=edges_g, config=graph_config)
         if picked:
             st.session_state.selected_node = picked
+
+        exd = payload.get("expand_diagnostics") or {}
+        if isinstance(exd, dict) and exd:
+            with st.expander("Graph expansion diagnostics", expanded=False):
+                for ek, ev in list(exd.items())[:28]:
+                    if isinstance(ev, (dict, list)):
+                        st.caption(f"**{ek}**")
+                        st.write(ev)
+                    else:
+                        st.caption(f"**{ek}** — {ev}")
 
         dl1, dl2 = st.columns(2)
         with dl1:
@@ -572,9 +795,21 @@ def run_srg_lite_ui() -> None:
             return
 
         st.markdown(f"### {paper.get('title', 'Untitled')}")
-        ftier = (paper.get("field_coherence_tier") or "").strip()
-        if ftier:
-            st.caption(f"Map position: {ftier.replace('_', ' ')} (core vs peripheral)")
+        br_lbl = _branch_label_for_paper_id(str(selected), branches_payload)
+        if br_lbl:
+            st.caption(f"Literature branch: {br_lbl}")
+        tags_ui = start_here_tags_for_paper(paper, payload.get("query_profile"))
+        if tags_ui:
+            st.caption(" · ".join(tags_ui))
+        _qp2 = payload.get("query_profile") or {}
+        st.markdown("**Relation to your query**")
+        st.caption(
+            why_it_matters_one_line(
+                paper,
+                query_text=str(_qp2.get("query_text") or "").strip(),
+                intent_label=str(_qp2.get("intent_mode_v2") or _qp2.get("query_intent") or "exploratory"),
+            )
+        )
         authors = paper.get("authors") or []
         if isinstance(authors, list) and authors:
             names = []
@@ -587,69 +822,77 @@ def run_srg_lite_ui() -> None:
         yr = paper.get("year")
         cc = paper.get("citation_count")
         oa_cites = _openalex_citation_count(paper)
-        meta_bits = []
+        primary_bits: list[str] = []
         if yr is not None:
-            meta_bits.append(str(yr))
+            primary_bits.append(f"Year: {yr}")
         if oa_cites is not None:
-            meta_bits.append(f"Citations (OpenAlex): {oa_cites:,}")
+            primary_bits.append(f"Citations (OpenAlex): {oa_cites:,}")
         if cc is not None:
-            meta_bits.append(f"Connections in this map: {cc}")
+            primary_bits.append(f"Connections in this map: {cc}")
+        if primary_bits:
+            st.caption(" · ".join(primary_bits))
+
+        technical_bits: list[str] = []
+        ftier = (paper.get("field_coherence_tier") or "").strip()
+        if ftier:
+            technical_bits.append(f"Map position (coherence tier): {ftier.replace('_', ' ')}")
         sem_fit = paper.get("semantic_fit_score")
         if sem_fit is not None:
             try:
-                meta_bits.append(f"Semantic fit (vs query): {float(sem_fit):.2f}")
+                technical_bits.append(f"Semantic fit (vs query): {float(sem_fit):.2f}")
             except (TypeError, ValueError):
                 pass
         gs = paper.get("graph_score")
         cs = paper.get("canonicality_score")
         if gs is not None:
             try:
-                meta_bits.append(f"Graph score (hub-adjusted): {float(gs):.2f}")
+                technical_bits.append(f"Graph score (hub-adjusted): {float(gs):.2f}")
             except (TypeError, ValueError):
                 pass
         if cs is not None:
             try:
-                meta_bits.append(f"Canonicality: {float(cs):.2f}")
+                technical_bits.append(f"Canonicality: {float(cs):.2f}")
             except (TypeError, ValueError):
                 pass
         ctxn = paper.get("context_score_norm")
         if ctxn is not None:
             try:
-                meta_bits.append(f"Neighborhood coherence: {float(ctxn):.2f}")
+                technical_bits.append(f"Neighborhood coherence: {float(ctxn):.2f}")
             except (TypeError, ValueError):
                 pass
         fs = paper.get("final_score")
         if fs is not None:
             try:
-                meta_bits.append(f"Final fused score: {float(fs):.4f}")
+                technical_bits.append(f"Final fused score: {float(fs):.4f}")
             except (TypeError, ValueError):
                 pass
         ah = paper.get("anchor_graph_hops")
         if ah is not None and int(ah) < 98:
-            meta_bits.append(f"Hops from query anchors: {int(ah)}")
+            technical_bits.append(f"Hops from query anchors: {int(ah)}")
         lsc = paper.get("local_semantic_connectivity")
         if lsc is not None:
             try:
-                meta_bits.append(f"Neighbor semantic coherence: {float(lsc):.2f}")
+                technical_bits.append(f"Neighbor semantic coherence: {float(lsc):.2f}")
             except (TypeError, ValueError):
                 pass
         dpn = paper.get("semantic_drift_penalty_norm")
         if dpn is not None and float(dpn) > 0:
             try:
-                meta_bits.append(f"Drift penalty (norm): {float(dpn):.2f}")
+                technical_bits.append(f"Drift penalty (norm): {float(dpn):.2f}")
             except (TypeError, ValueError):
                 pass
         isim = paper.get("intent_similarity")
         if isim is not None:
             try:
-                meta_bits.append(f"Intent similarity: {float(isim):.2f}")
+                technical_bits.append(f"Intent similarity: {float(isim):.2f}")
             except (TypeError, ValueError):
                 pass
         ivb = paper.get("intent_verification_backend")
         if ivb:
-            meta_bits.append(f"Intent backend: {ivb}")
-        if meta_bits:
-            st.caption(" · ".join(meta_bits))
+            technical_bits.append(f"Intent backend: {ivb}")
+        if technical_bits:
+            with st.expander("Technical scores & diagnostics", expanded=False):
+                st.caption(" · ".join(technical_bits))
 
         abs_txt = (paper.get("abstract") or "").strip()
         if abs_txt:

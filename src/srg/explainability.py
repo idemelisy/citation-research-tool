@@ -41,11 +41,11 @@ def build_why_it_matters(
 
     lines: list[str] = ["Selected because:"]
     if max(sem, ins) >= 0.45:
-        lines.append(f"- High semantic match to query intent ({intent}).")
+        lines.append(f"- Core alignment with your query intent ({intent}).")
     elif max(sem, ins) >= 0.28:
-        lines.append(f"- Moderate semantic alignment with your query ({intent}).")
+        lines.append(f"- Moderate alignment with your query ({intent}).")
     else:
-        lines.append("- Limited direct semantic match; kept for neighborhood structure.")
+        lines.append("- Limited direct match; kept for neighborhood structure on the citation map.")
 
     lines.append(f"- {_recency_phrase(paper)}")
 
@@ -53,15 +53,15 @@ def build_why_it_matters(
     cou = int(paper.get("relation_max_coupling") or 0)
     dh = int(paper.get("relation_direct_hits") or 0)
     if dh > 0:
-        lines.append("- Anchor overlap: direct citation tie to a query seed in this map.")
+        lines.append("- Directly connected to your starting papers (citation tie to a seed in this map).")
     elif coc >= 2:
-        lines.append("- Anchor overlap: strong co-citation with papers near your seeds.")
+        lines.append("- Frequently cited alongside work near your seeds (co-citation signal).")
     elif cou >= 2:
-        lines.append("- Anchor overlap: shared references with seed neighborhood (bibliographic coupling).")
+        lines.append("- Shares references with the seed neighborhood (same bibliographic conversation).")
     elif hops is not None and int(hops) <= 2:
-        lines.append(f"- Anchor overlap: within {hop_s} undirected hop(s) of query seeds.")
+        lines.append(f"- Within {hop_s} undirected hop(s) of your query seeds on this map.")
     else:
-        lines.append("- Anchor overlap: reached via citation expansion from the seed neighborhood.")
+        lines.append("- Reached via citation expansion from the seed neighborhood.")
 
     title = (paper.get("title") or "").strip()
     if q and title:

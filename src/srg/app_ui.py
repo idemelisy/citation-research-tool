@@ -261,6 +261,10 @@ def _uploaded_pdf_titles_citing(payload: dict[str, Any], target_id: str) -> list
 def _node_from_payload(node: dict[str, Any]) -> Node:
     label = (node["title"][:40] + "...") if len(node["title"]) > 40 else node["title"]
     is_fh = bool(node.get("is_foundational_hub")) and bool(node.get("foundational_eligible", True))
+    origin = (node.get("seed_origin") or "").strip()
+    expand_sem = bool((node.get("expand_explanation") or "").strip()) or float(
+        node.get("relation_expand_score") or 0.0
+    ) >= 0.28
     sz = int(
         node.get("viz_size")
         or (
@@ -269,43 +273,52 @@ def _node_from_payload(node: dict[str, Any]) -> Node:
             else (
                 30
                 if node.get("is_missing_link_candidate")
-                else (34 if node.get("source_label") == "PDF" or node.get("seed_origin") == "uploaded_pdf" else 18)
+                else (34 if node.get("source_label") == "PDF" or origin == "uploaded_pdf" else 18)
             )
         )
     )
-    col = node.get("viz_color") or (
-        "#D4AF37"
-        if is_fh
-        else (
-            "#CA8A04"
-            if node.get("is_missing_link_candidate")
-            else (
-                "#1D4ED8"
-                if node.get("source_label") == "PDF" or node.get("seed_origin") == "uploaded_pdf"
-                else "#D4D4D8"
-            )
-        )
-    )
-    grp = (
-        "foundational"
-        if is_fh
-        else (
-            "missing_link"
-            if node.get("is_missing_link_candidate")
-            else ("uploaded" if node.get("seed_origin") == "uploaded_pdf" else "discovered")
-        )
-    )
+    if origin == "uploaded_pdf" or node.get("source_label") == "PDF":
+        grp = "uploaded"
+        role = "Library seed (uploaded PDF)"
+        default_col = "#1D4ED8"
+    elif is_fh:
+        grp = "foundational"
+        role = "Foundational hub in this map"
+        default_col = "#D4AF37"
+    elif node.get("is_missing_link_candidate"):
+        grp = "missing_link"
+        role = "Bridge / missing-link candidate"
+        default_col = "#CA8A04"
+    elif origin == "api_search":
+        grp = "anchor_search"
+        role = "Query anchor (seeded from search)"
+        default_col = "#059669"
+    elif expand_sem and origin == "discovered":
+        grp = "semantic_broadened"
+        role = "Broadened via semantic / expansion signals"
+        default_col = "#9333EA"
+    elif origin == "discovered":
+        grp = "discovered_edge"
+        role = "Discovered via citation expansion"
+        default_col = "#94A3B8"
+    else:
+        grp = "discovered_edge"
+        role = "Discovered or merged neighbor"
+        default_col = "#94A3B8"
+    col = node.get("viz_color") or default_col
     pos: dict[str, Any] = {}
     if node.get("viz_physics_fixed"):
         pos["x"] = float(node.get("viz_x", 0.0))
         pos["y"] = float(node.get("viz_y", 0.0))
         pos["fixed"] = {"x": True, "y": True}
+    ttl = node.get("title") or node["id"]
+    hover = f"{ttl}\n{role} · Source: {node.get('source_label', 'API')}"
     return Node(
         id=node["id"],
         label=label,
         size=sz,
         color=col,
-        title=f"{node['title']} (Source: {node.get('source_label', 'API')})",
+        title=hover,
         group=grp,
         **pos,
     )

@@ -27,6 +27,7 @@ from .evaluation import QualityReport, build_quality_report
 from .feedback import FeedbackStore
 from .graph import CitationGraphBuilder, GraphSnapshot, SemanticMetrics
 from .intent_verification import apply_intent_verification_layer
+from .lite_ux import build_lite_ux_payload
 from .ingestion import (
     ArXivClient,
     CacheStore,
@@ -1910,7 +1911,7 @@ class SRGApplicationService:
             "lite_intent_verification": lite_intent_verification if lite_v2_ranking else False,
         }
 
-        return {
+        out_payload: dict[str, Any] = {
             "papers": graph_json["nodes"],
             "graph": graph_json,
             "metrics": {
@@ -2034,6 +2035,8 @@ class SRGApplicationService:
             "lite_display_relevance_floor": lite_display_relevance_floor,
             "retrieval_quality": retrieval_quality,
         }
+        out_payload["lite_ux"] = build_lite_ux_payload(out_payload)
+        return out_payload
 
     def rank_nodes_v2(
         self,
