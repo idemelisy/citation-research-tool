@@ -11,6 +11,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from .synthesis_export import paper_reading_order_score
+from .topical_ranking import branch_purity_score
 
 
 def _tokenize_meaningful(text: str) -> set[str]:
@@ -72,6 +73,12 @@ def enrich_branches_why_included(
             parts.append("they share overlapping reference lists")
         else:
             parts.append("they are linked through citation edges and ranking signals in this map")
+        purity = branch_purity_score(members, qp)
+        if purity < 0.45:
+            parts.append("this branch has mixed topical focus — interpret with caution")
+        elif purity >= 0.72:
+            parts.append("papers here share strong topical coherence for your query")
+        b["branch_purity"] = round(purity, 3)
         b["why_included"] = "This branch appears because " + " and ".join(parts) + "."
 
 
@@ -417,41 +424,5 @@ def build_insights(
                     "branch_ids": [bi.get("id"), bj.get("id")],
                 }
             )
-
-    cy = 2026
-    found = [
-        p
-        for p in papers
-        if p.get("is_foundational_hub")
-        and p.get("foundational_eligible", True)
-        and (_year_of(str(p["id"]), by_id) or cy) <= cy - 5
-    ]
-    found = sorted(found, key=lambda p: float(p.get("citation_count", 0) or 0), reverse=True)[:6]
-    front = [
-        p
-        for p in papers
-        if (_year_of(str(p["id"]), by_id) or 0) >= cy - 4 and float(p.get("relation_expand_score", 0) or 0) >= 0.08
-    ]
-    qp2 = payload.get("query_profile") or {}
-    iv2f = (qp2.get("intent_mode_v2") or "").strip() or None
-    qtf = (qp2.get("query_text") or "").strip()
-    front = sorted(
-        front,
-        key=lambda p: paper_reading_order_score(p, intent_mode_v2=iv2f, query_text=qtf),
-        reverse=True,
-    )[:6]
-    if found or front:
-        out.append(
-            {
-                "type": "foundational_vs_frontier",
-                "title": "Foundational vs frontier",
-                "body": (
-                    "Foundational rows are older hubs or promoted anchors; frontier rows are recent, "
-                    "well-connected papers in this slice — read foundations for context, frontier for what changed."
-                ),
-                "foundational_ids": [str(p["id"]) for p in found if p.get("id")],
-                "frontier_ids": [str(p["id"]) for p in front if p.get("id")],
-            }
-        )
 
     return out

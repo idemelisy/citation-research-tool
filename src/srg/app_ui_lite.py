@@ -28,8 +28,12 @@ if __package__ in (None, ""):
     )
     from srg.explainability import why_it_matters_one_line
     from srg.synthesis_export import build_bibtex, build_markdown_report
+    from srg.core.defaults import LITE_DISCOVERY_OPTIONS
+    from srg.core.pipeline import generate_reading_list
 else:
     from .api_adapter import SRGApplicationService
+    from .core.defaults import LITE_DISCOVERY_OPTIONS
+    from .core.pipeline import generate_reading_list
     from .lite_ux import start_here_tags_for_paper
     from .app_ui import (
         _filter_graph_for_display,
@@ -41,45 +45,6 @@ else:
     )
     from .explainability import why_it_matters_one_line
     from .synthesis_export import build_bibtex, build_markdown_report
-
-# Field-aware discovery phase: citation neighborhoods first; lexical/topic signals secondary.
-LITE_DISCOVERY_OPTIONS: dict[str, Any] = {
-    "top_n": 50,
-    "coupling_threshold": 2,
-    "enable_two_hop": True,
-    "concept_threshold": 0.3,
-    "relation_topic_weight": 0.0,
-    "foundational_boost": 1.2,
-    "allowed_domains": ["cs", "social_sciences", "law", "biomedical", "physics", "ethics"],
-    "lite_field_aware": True,
-    "w_coupling": 0.75,
-    "w_cocitation": 1.0,
-    "w_direct": 2.0,
-    # Retrieval repair & citation expansion phase — deeper hop budget, stronger neighborhoods.
-    "lite_retrieval_repair": True,
-    "two_hop_budget_floor": 200,
-    # Field coherence & canonicality — stabilize anchors, penalize distant drift, curate visible graph.
-    "lite_coherence_stabilization": True,
-    "lite_user_graph_relevance_floor": 0.14,
-    # SRG Lite v2 / v2.1 — intent fusion + semantic control (drift / domain / hubs); see semantic_control.py.
-    "lite_v2_ranking": True,
-    "lite_semantic_graph_ranking": False,
-    "lite_semantic_control": True,
-    # Intent verification + semantic alignment (embedding cosine if sentence-transformers installed).
-    "lite_intent_verification": True,
-    # Roadmap Phase 2.3 — Markdown export without raw internal ids / verbose diagnostics.
-    "export_clean_reading_mode": True,
-    # Phase 1.1 / 1.3 / 2.2 (see api_adapter + canonicality + roadmap_metrics).
-    "lite_query_conditioned_canonicality": True,
-    "lite_semantic_rank_hard_floor": True,
-    "lite_foundational_eligibility_rules": True,
-    "semantic_rank_min_score": 0.25,
-    "below_semantic_floor_multiplier": 0.4,
-    "semantic_top10_below_floor_multiplier": 0.35,
-    "foundational_min_semantic_score": 0.35,
-    "foundational_min_intent_similarity": 0.30,
-    "foundational_max_anchor_hops": 3,
-}
 
 LITE_CSS = """
 <style>
@@ -308,40 +273,6 @@ def _recent_important(
     return cand[:12]
 
 
-def _start_here_papers(payload: dict[str, Any], pmap: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    recs = (payload.get("discovery") or {}).get("recommendations") or []
-    out: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for r in recs:
-        pid = r.get("paper_id")
-        if not pid or pid in seen:
-            continue
-        p = pmap.get(pid)
-        if p and not p.get("graph_noise"):
-            if str(p.get("title") or "").startswith("Pending metadata"):
-                continue
-            out.append(p)
-            seen.add(pid)
-        if len(out) >= 8:
-            break
-    if len(out) < 5:
-        _qp = payload.get("query_profile") or {}
-        _iv2 = _qp.get("intent_mode_v2")
-        _qt = (_qp.get("query_text") or "").strip() or None
-        ranked = sorted(
-            [p for p in (payload.get("papers") or []) if not p.get("graph_noise")],
-            key=lambda p: _importance_score_for_ui(p, intent_mode_v2=_iv2, query_text=_qt),
-            reverse=True,
-        )
-        for p in ranked:
-            if p["id"] not in seen:
-                out.append(p)
-                seen.add(p["id"])
-            if len(out) >= 8:
-                break
-    return out[:8]
-
-
 def _neighbor_titles(payload: dict[str, Any], selected: str, pmap: dict[str, dict[str, Any]], limit: int = 6) -> list[str]:
     edges = _related_edges(payload["graph"], selected)
     titles: list[str] = []
@@ -385,6 +316,8 @@ def run_srg_lite_ui() -> None:
         st.session_state.payload = None
     if "selected_node" not in st.session_state:
         st.session_state.selected_node = None
+    if "lite_explore_pending" not in st.session_state:
+        st.session_state.lite_explore_pending = None
 
     service: SRGApplicationService = st.session_state.service
 
@@ -394,7 +327,10 @@ def run_srg_lite_ui() -> None:
         unsafe_allow_html=True,
     )
 
-    q_col, btn_col = st.columns([5, 1])
+    explore_pending = (st.session_state.lite_explore_pending or "").strip()
+    exploring = bool(explore_pending)
+
+    q_col, btn_col = st.columns([5, 1], vertical_alignment="center")
     with q_col:
         q = st.text_input(
             "Topic, paper title, DOI, or arXiv id",
@@ -403,36 +339,47 @@ def run_srg_lite_ui() -> None:
             key="lite_query",
         )
     with btn_col:
-        st.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
-        discover = st.button("Explore", type="primary", use_container_width=True, key="lite_discover")
+        discover = st.button(
+            "Running…" if exploring else "Explore",
+            type="primary",
+            use_container_width=True,
+            key="lite_discover",
+            disabled=exploring,
+            help="Exploration in progress — please wait." if exploring else "Build a citation map for this query.",
+        )
 
-    if discover:
+    if discover and not exploring:
         qq = (q or "").strip()
         if len(qq) < 3 and not re.search(r"\b10\.\d{4,9}/", qq, flags=re.IGNORECASE):
             st.info("Use at least three characters, or paste a DOI (10.xxxx/…).")
         else:
-            with st.spinner("Resolving multiple anchors and expanding citation neighborhoods…"):
-                seeds = service.discover_from_query(qq, text_search_backend="openalex")
-            if not seeds:
-                st.warning(
-                    "No papers matched that input. The phrase may be too vague for OpenAlex, or outside coverage. "
-                    "Try a DOI (`10....`), an arXiv id (`1234.5678`), or paste an exact paper title."
+            st.session_state.lite_explore_pending = qq
+            st.rerun()
+
+    if exploring:
+        qq = explore_pending
+        st.session_state.lite_explore_pending = None
+        try:
+            with st.spinner("Resolving anchors and building citation graph…"):
+                reading = generate_reading_list(
+                    qq,
+                    discovery_options=LITE_DISCOVERY_OPTIONS,
+                    service=service,
                 )
-            else:
-                with st.spinner("Building citation graph: references, 2-hop expansion, coupling…"):
-                    st.session_state.payload = service.run_pipeline(
-                        seeds,
-                        discipline=None,
-                        discovery_options=LITE_DISCOVERY_OPTIONS,
-                    )
-                st.session_state.selected_node = None
+            st.session_state.payload = reading["payload"]
+            st.session_state.selected_node = None
+        except ValueError as exc:
+            st.info(str(exc))
+        except RuntimeError:
+            st.warning(
+                "No papers matched that input. The phrase may be too vague for OpenAlex, or outside coverage. "
+                "Try a DOI (`10....`), an arXiv id (`1234.5678`), or paste an exact paper title."
+            )
 
     payload = st.session_state.payload
     if not payload:
         st.markdown(
-            '<p class="lite-hero">Enter a topic or paper id. Retrieval uses multiple anchors and citation expansion '
-            "(not a single semantic hit). SRG Lite v2.1 adds semantic control (drift, domain, hubs) and an intent verification pass "
-            "(embedding cosine when optional deps are installed, else lexical fallback) to rescore against query-specific intent.</p>",
+            '<p class="lite-hero"></p>',
             unsafe_allow_html=True,
         )
         return
@@ -479,7 +426,9 @@ def run_srg_lite_ui() -> None:
         st.session_state.payload = payload
     lite_ux = payload.get("lite_ux") if isinstance(payload.get("lite_ux"), dict) else {}
     branches_payload = lite_ux.get("branches") if isinstance(lite_ux.get("branches"), list) else []
-    start_entries = lite_ux.get("start_here") if isinstance(lite_ux.get("start_here"), list) else []
+    foundational_entries = (
+        lite_ux.get("foundational_papers") if isinstance(lite_ux.get("foundational_papers"), list) else []
+    )
     rh = lite_ux.get("retrieval_health") if isinstance(lite_ux.get("retrieval_health"), dict) else {}
     signals = rh.get("signals") if isinstance(rh.get("signals"), list) else []
     if signals:
@@ -521,24 +470,6 @@ def run_srg_lite_ui() -> None:
                         st.markdown(f"{i}. `{prov}:{sid}` · _{origin}_ — _(title not in current graph slice)_")
     branches_fb = _research_branches_for_lite(papers, payload)
     branch_rows = _literature_branch_rows(branches_payload, branches_fb, pmap)
-    foundational = [
-        p for p in papers if p.get("is_foundational_hub") and p.get("foundational_eligible", True)
-    ]
-    recent_imp = _recent_important(papers, payload=payload)
-    start_here_papers = _start_here_papers(payload, pmap)
-    if start_entries:
-        sh_ordered: list[dict[str, Any]] = []
-        for it in start_entries:
-            if not isinstance(it, dict):
-                continue
-            pid = str(it.get("paper_id") or "").strip()
-            p = pmap.get(pid)
-            if p and not p.get("graph_noise"):
-                sh_ordered.append(p)
-        start_here_for_order = sh_ordered if sh_ordered else start_here_papers
-    else:
-        start_here_for_order = start_here_papers
-
     display_floor = float(payload.get("lite_display_relevance_floor") or 0.0)
     graph_display = _filter_graph_for_display(payload, display_floor, hide_weak_edges=True)
     nodes_g, edges_g = _to_agraph_payload(graph_display)
@@ -559,57 +490,24 @@ def run_srg_lite_ui() -> None:
         },
     )
 
-    valid_start_entries = [
+    valid_foundational = [
         it
-        for it in (start_entries[:5] if start_entries else [])
+        for it in foundational_entries[:12]
         if isinstance(it, dict) and str(it.get("paper_id") or "").strip()
     ]
-    if valid_start_entries:
-        st.subheader("Start here")
-        st.caption("Curated entry points (3–5 papers), diversified across branches where possible.")
-        sh_cols = st.columns(max(len(valid_start_entries), 1))
-        for i, it in enumerate(valid_start_entries):
+    if valid_foundational:
+        st.subheader("Foundational papers")
+        st.caption("Canonical method-defining works for this query (exact method matches only).")
+        for it in valid_foundational:
             pid = str(it.get("paper_id") or "").strip()
             p = pmap.get(pid)
             ttl = (it.get("title") or (p.get("title") if p else "") or pid).strip()
+            ol = (it.get("one_line") or "").strip()
             yr = it.get("year")
-            yr_txt = str(yr) if yr is not None else "—"
-            tags = it.get("tags") or []
-            tag_txt = ", ".join(str(t) for t in tags if t) if isinstance(tags, list) else ""
-            one_line = (it.get("one_line") or "").strip()
-            with sh_cols[i]:
-                st.markdown(f"**{ttl[:110]}{'…' if len(ttl) > 110 else ''}**")
-                st.caption(f"Year: {yr_txt}")
-                if tag_txt:
-                    st.caption(tag_txt)
-                if one_line:
-                    st.caption(one_line)
-                if p:
-                    if st.button("Open in details", key=f"sh_top_{pid}", use_container_width=True):
-                        st.session_state.selected_node = pid
-                        st.rerun()
-                else:
-                    st.caption("_Not in current graph slice._")
-        st.divider()
-
-    reading_paths = lite_ux.get("reading_paths") if isinstance(lite_ux.get("reading_paths"), list) else []
-    if reading_paths:
-        st.subheader("Suggested reading paths")
-        st.caption("Heuristic citation-aware orderings — not a formal survey of the field.")
-        for path in reading_paths[:3]:
-            if not isinstance(path, dict):
-                continue
-            pid = str(path.get("id") or "path")
-            with st.expander(str(path.get("label") or "Reading path"), expanded=False):
-                if path.get("rationale"):
-                    st.caption(str(path["rationale"]))
-                for j, paper_id in enumerate(path.get("paper_ids") or [], start=1):
-                    pp = pmap.get(str(paper_id))
-                    t = (pp.get("title") if pp else paper_id) or paper_id
-                    short = str(t)[:88] + ("…" if len(str(t)) > 88 else "")
-                    if pp and st.button(f"{j}. {short}", key=f"rp_{pid}_{j}_{paper_id}", use_container_width=True):
-                        st.session_state.selected_node = str(paper_id)
-                        st.rerun()
+            yr_txt = f" ({yr})" if yr is not None else ""
+            st.markdown(f"- **{ttl[:120]}{'…' if len(ttl) > 120 else ''}**{yr_txt}")
+            if ol:
+                st.caption(ol)
         st.divider()
 
     insights_list = lite_ux.get("insights") if isinstance(lite_ux.get("insights"), list) else []
@@ -625,32 +523,6 @@ def run_srg_lite_ui() -> None:
                 st.markdown(f"**{ins.get('title', 'Insight')}**")
                 if ins.get("body"):
                     st.markdown(str(ins["body"]))
-                if ins.get("type") == "foundational_vs_frontier":
-                    fids = ins.get("foundational_ids") or []
-                    zids = ins.get("frontier_ids") or []
-                    ic1, ic2 = st.columns(2)
-                    with ic1:
-                        st.caption("Foundational")
-                        for fid in fids[:5]:
-                            fp = pmap.get(str(fid))
-                            if fp and st.button(
-                                (fp.get("title") or fid)[:70],
-                                key=f"ins_f_{fid}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.selected_node = str(fid)
-                                st.rerun()
-                    with ic2:
-                        st.caption("Frontier")
-                        for zid in zids[:5]:
-                            zp = pmap.get(str(zid))
-                            if zp and st.button(
-                                (zp.get("title") or zid)[:70],
-                                key=f"ins_z_{zid}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.selected_node = str(zid)
-                                st.rerun()
         st.divider()
 
     trends = (payload.get("discovery") or {}).get("trends") or {}
@@ -672,70 +544,31 @@ def run_srg_lite_ui() -> None:
                     st.caption(summ if summ else _branch_description(branch_name))
                     if why:
                         st.markdown(f"> {why}")
-                    found_b = [
-                        p
-                        for p in plist
-                        if p.get("is_foundational_hub") and p.get("foundational_eligible", True)
-                    ][:4]
-                    recent_b = [p for p in plist if p.get("year") and int(p["year"]) >= 2021][:4]
-                    if found_b:
-                        st.markdown("**Foundational**")
-                        for p in found_b:
-                            oa = _openalex_citation_count(p)
-                            tg = ", ".join(start_here_tags_for_paper(p, qp0))
-                            st.caption(
-                                f"Year {p.get('year', '—')} · Citations {oa if oa is not None else '—'}"
-                                + (f" · {tg}" if tg else "")
-                            )
-                            if st.button(
-                                p.get("title", "")[:72] + ("…" if len(p.get("title", "")) > 72 else ""),
-                                key=f"lb_{p['id']}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.selected_node = p["id"]
-                                st.rerun()
-                    if recent_b:
-                        st.markdown("**Recent**")
-                        for p in recent_b:
-                            oa = _openalex_citation_count(p)
-                            tg = ", ".join(start_here_tags_for_paper(p, qp0))
-                            st.caption(
-                                f"Year {p.get('year', '—')} · Citations {oa if oa is not None else '—'}"
-                                + (f" · {tg}" if tg else "")
-                            )
-                            if st.button(
-                                p.get("title", "")[:72] + ("…" if len(p.get("title", "")) > 72 else ""),
-                                key=f"lr_{p['id']}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.selected_node = p["id"]
-                                st.rerun()
+                    for _br_obj in branches_payload:
+                        if isinstance(_br_obj, dict) and str(_br_obj.get("label") or "") == branch_name:
+                            warn = _br_obj.get("purity_warning")
+                            if warn:
+                                st.caption(str(warn))
+                            break
+                    try:
+                        from .topical_ranking import semantic_purity_score
+                    except ImportError:
+                        from srg.topical_ranking import semantic_purity_score  # type: ignore[no-redef]
 
-        with st.expander("More entry points", expanded=pin_adv):
-            st.markdown("**Foundational**")
-            for p in foundational[:6]:
-                label = (p.get("title") or p["id"])[:76]
-                if st.button(label + ("…" if len(p.get("title", "") or "") > 76 else ""), key=f"fd_{p['id']}", use_container_width=True):
-                    st.session_state.selected_node = p["id"]
-                    st.rerun()
-            if not foundational:
-                st.caption("No foundational hubs in this slice yet — try a broader query.")
-
-            st.markdown("**Recent & influential**")
-            for p in recent_imp[:6]:
-                yr = p.get("year")
-                label = f"[{yr}] " + (p.get("title") or p["id"])[:68]
-                if st.button(label + ("…" if len(str(p.get("title", ""))) > 72 else ""), key=f"ri_{p['id']}", use_container_width=True):
-                    st.session_state.selected_node = p["id"]
-                    st.rerun()
-
-            st.markdown("**Suggested reading order**")
-            for i, p in enumerate(start_here_for_order[:5], start=1):
-                st.caption(
-                    f"{i}. {(p.get('title') or p['id'])[:90]}…"
-                    if len(p.get("title", "") or "") > 90
-                    else f"{i}. {p.get('title') or p['id']}"
-                )
+                    top_branch = sorted(
+                        plist,
+                        key=lambda p: semantic_purity_score(p, qp0),
+                        reverse=True,
+                    )[:4]
+                    for p in top_branch:
+                        if st.button(
+                            (p.get("title") or p["id"])[:72]
+                            + ("…" if len(p.get("title", "") or "") > 72 else ""),
+                            key=f"lb_{p['id']}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.selected_node = p["id"]
+                            st.rerun()
 
     with mid_w:
         st.subheader("Research map")

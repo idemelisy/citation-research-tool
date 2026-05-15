@@ -16,6 +16,9 @@
     {"id": "b01", "domain": "biomedical", "text": "single-cell RNA sequencing batch correction", "gold_intent": "technical_method"},
     {"id": "b02", "domain": "biomedical", "text": "protein structure prediction AlphaFold review", "gold_intent": "survey"},
     {"id": "b03", "domain": "biomedical", "text": "CRISPR off-target detection recent advances", "gold_intent": "recent_progress"},
-    {"id": "x01", "domain": "graphics", "text": "history of seminal ray tracing papers", "gold_intent": "historical_foundation"}
+    {"id": "x01", "domain": "graphics", "text": "history of seminal ray tracing papers", "gold_intent": "historical_foundation"},
+    {"id": "a01", "domain": "ml", "text": "direct preference optimization", "gold_intent": "technical_method", "intent_registry_id": "direct_preference_optimization"},
+    {"id": "a02", "domain": "ml", "text": "transformer", "gold_intent": "technical_method", "intent_registry_id": "transformer_nlp"},
+    {"id": "a03", "domain": "ml", "text": "visual debugging", "gold_intent": "technical_method", "intent_registry_id": "visual_debugging"}
   ]
 }

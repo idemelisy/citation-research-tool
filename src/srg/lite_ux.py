@@ -1,7 +1,7 @@
 """SRG Lite presentation layer — single source of truth for curated UX fields on pipeline payloads.
 
 Keep ``payload["lite_ux"]`` disciplined: only documented top-level keys
-(``start_here``, ``branches``, ``reading_paths``, ``retrieval_health``, ``insights``).
+(``foundational_papers``, ``branches``, ``retrieval_health``; optional: ``insights``).
 Do not use ad-hoc keys like ``lite_ux["random_feature"]`` — extend via named sections above.
 """
 
@@ -12,19 +12,20 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from .explainability import why_it_matters_one_line
+from .branch_coherence import filter_and_curate_branches
+from .query_intent_gating import build_foundational_paper_entries
 from .lite_ux_extended import (
     build_insights,
-    build_reading_paths,
     build_retrieval_health,
     enrich_branches_why_included,
 )
 from .synthesis_export import paper_reading_order_score
+from .topical_ranking import semantic_purity_score
 
 _LITE_UX_VERSION = 2
 
-# Display order for Start Here role tags (short labels; no long prose).
-_START_HERE_ROLE_TAG_ORDER: tuple[str, ...] = (
+# Display order for paper role tags on detail cards (short labels; no long prose).
+_PAPER_ROLE_TAG_ORDER: tuple[str, ...] = (
     "Foundational",
     "Survey",
     "Recent",
@@ -214,11 +215,12 @@ def _build_branch_objects(
             n += 1
         used_labels.add(label.lower())
         bid = f"lite-branch-{idx}"
-        sorted_members = sorted(
-            plist,
-            key=lambda p: paper_reading_order_score(p, intent_mode_v2=iv2, query_text=qt_raw),
-            reverse=True,
-        )
+        def _branch_member_key(p: dict[str, Any]) -> float:
+            pur = semantic_purity_score(p, qp) if qp else 0.5
+            ro = paper_reading_order_score(p, intent_mode_v2=iv2, query_text=qt_raw)
+            return pur * 3.0 + ro * 0.35
+
+        sorted_members = sorted(plist, key=_branch_member_key, reverse=True)
         for p in sorted_members:
             pid = str(p.get("id") or "")
             if pid:
@@ -251,8 +253,8 @@ def _paper_domain_lower(p: dict[str, Any]) -> str:
     return str(p.get("domain") or "").strip().lower()
 
 
-def _start_here_tags(p: dict[str, Any], qp: dict[str, Any] | None = None) -> list[str]:
-    """Role tags for Start Here / paper cards — explain *why* this paper is surfaced, without long text."""
+def _paper_role_tags(p: dict[str, Any], qp: dict[str, Any] | None = None) -> list[str]:
+    """Short role tags for paper detail cards."""
     chosen: set[str] = set()
     if p.get("is_foundational_hub") and p.get("foundational_eligible", True):
         chosen.add("Foundational")
@@ -265,7 +267,7 @@ def _start_here_tags(p: dict[str, Any], qp: dict[str, Any] | None = None) -> lis
             chosen.add("Recent")
     except (TypeError, ValueError):
         pass
-    if p.get("is_missing_link_candidate"):
+    if p.get("is_missing_link_candidate") and not p.get("is_exploratory_bridge"):
         chosen.add("Bridge")
     try:
         cs = float(p.get("canonicality_score") or 0.0)
@@ -273,152 +275,13 @@ def _start_here_tags(p: dict[str, Any], qp: dict[str, Any] | None = None) -> lis
         cs = 0.0
     if cs >= _CANONICAL_TAG_MIN_SCORE:
         chosen.add("Canonical")
+    if float(p.get("flagship_match_strength", 0) or 0) >= 0.72:
+        chosen.add("Canonical")
     qdom = _query_inferred_domains_lower(qp)
     pd = _paper_domain_lower(p)
     if qdom and pd and pd not in qdom:
         chosen.add("Cross-domain")
-    return [t for t in _START_HERE_ROLE_TAG_ORDER if t in chosen]
-
-
-def _candidate_paper_order(
-    papers: list[dict[str, Any]],
-    recommendations: list[dict[str, Any]],
-    qp: dict[str, Any],
-) -> list[str]:
-    """Stable priority: discovery recommendations first, then reading-order fill."""
-    iv2 = (qp.get("intent_mode_v2") or "").strip() or None
-    qt_raw = (qp.get("query_text") or "").strip()
-    by_id = {str(p["id"]): p for p in papers if p.get("id")}
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for r in recommendations:
-        pid = str(r.get("paper_id") or "").strip()
-        if not pid or pid in seen:
-            continue
-        ordered.append(pid)
-        seen.add(pid)
-    ranked = sorted(
-        [p for p in papers if not p.get("graph_noise") and p.get("id")],
-        key=lambda p: paper_reading_order_score(p, intent_mode_v2=iv2, query_text=qt_raw),
-        reverse=True,
-    )
-    for p in ranked:
-        pid = str(p["id"])
-        if pid not in seen:
-            ordered.append(pid)
-            seen.add(pid)
-    return [pid for pid in ordered if pid in by_id]
-
-
-def _pick_start_here_ids(
-    papers: list[dict[str, Any]],
-    recommendations: list[dict[str, Any]],
-    qp: dict[str, Any],
-    pid_to_branch: dict[str, str],
-    *,
-    max_items: int = 5,
-) -> list[str]:
-    by_id = {str(p["id"]): p for p in papers if p.get("id")}
-    cand_order = _candidate_paper_order(papers, recommendations, qp)
-    by_branch: dict[str, list[str]] = defaultdict(list)
-    for pid in cand_order:
-        p = by_id.get(pid)
-        if not p:
-            continue
-        ttl = str(p.get("title") or "")
-        if ttl.startswith("Pending metadata"):
-            continue
-        bid = pid_to_branch.get(pid, "_unassigned")
-        by_branch[bid].append(pid)
-
-    picked: list[str] = []
-    titles: list[str] = []
-
-    def titles_conflict(title: str) -> bool:
-        return any(_titles_near_duplicate(title, t) for t in titles)
-
-    branch_keys = sorted(by_branch.keys(), key=lambda k: -len(by_branch[k]))
-    while len(picked) < max_items and branch_keys:
-        progressed = False
-        for bk in branch_keys:
-            lst = by_branch[bk]
-            while lst:
-                pid = lst.pop(0)
-                p = by_id.get(pid)
-                if not p:
-                    continue
-                t = str(p.get("title") or "")
-                if titles_conflict(t):
-                    continue
-                picked.append(pid)
-                titles.append(t)
-                progressed = True
-                break
-            if len(picked) >= max_items:
-                break
-        if not progressed:
-            break
-
-    if len(picked) < max_items:
-        for pid in cand_order:
-            if len(picked) >= max_items:
-                break
-            if pid in picked:
-                continue
-            p = by_id.get(pid)
-            if not p:
-                continue
-            t = str(p.get("title") or "")
-            if t.startswith("Pending metadata"):
-                continue
-            if titles_conflict(t):
-                continue
-            picked.append(pid)
-            titles.append(t)
-
-    return picked[:max_items]
-
-
-def _start_here_entries(
-    papers: list[dict[str, Any]],
-    recommendations: list[dict[str, Any]],
-    qp: dict[str, Any],
-    pid_to_branch: dict[str, str],
-    branch_list: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    by_id = {str(p["id"]): p for p in papers if p.get("id")}
-    branch_label_by_id = {str(b["id"]): str(b.get("label") or "") for b in branch_list}
-    bid_by_pid = pid_to_branch
-    qt_why = (qp.get("query_text") or "").strip()
-    intent_for_why = str(qp.get("intent_mode_v2") or qp.get("query_intent") or "exploratory")
-
-    pids = _pick_start_here_ids(papers, recommendations, qp, pid_to_branch, max_items=5)
-    out: list[dict[str, Any]] = []
-    for pid in pids:
-        p = by_id.get(pid)
-        if not p:
-            continue
-        bid = bid_by_pid.get(pid, "")
-        branch_label = branch_label_by_id.get(bid, "")
-        one_line = why_it_matters_one_line(p, query_text=qt_why, intent_label=intent_for_why)
-        yr = p.get("year")
-        year_out: int | None
-        try:
-            year_out = int(yr) if yr is not None else None
-        except (TypeError, ValueError):
-            year_out = None
-        out.append(
-            {
-                "paper_id": pid,
-                "title": (p.get("title") or pid).strip(),
-                "year": year_out,
-                "one_line": one_line,
-                "tags": _start_here_tags(p, qp),
-                "branch_id": bid or None,
-                "branch_label": branch_label or None,
-            }
-        )
-    return out
+    return [t for t in _PAPER_ROLE_TAG_ORDER if t in chosen]
 
 
 def build_lite_ux_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -427,36 +290,36 @@ def build_lite_ux_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     Consumers: Streamlit lite UI, markdown export, future API. Do not re-derive these lists ad hoc.
 
-    Reserved top-level keys (extend only along these lines): ``start_here``, ``branches``,
-    ``reading_paths``, ``retrieval_health``, ``insights``. Omit unknown keys until defined.
+    Primary surfaces: ``foundational_papers``, ``branches``, ``retrieval_health``.
+    Secondary (optional): ``insights``.
     """
     papers = list(payload.get("papers") or [])
     qp = payload.get("query_profile") or {}
-    recs = (payload.get("discovery") or {}).get("recommendations") or []
-    if not isinstance(recs, list):
-        recs = []
 
     branches, pid_to_branch = _build_branch_objects(papers, qp)
+    branches = filter_and_curate_branches(branches, papers, qp)
+    pid_to_branch = {}
+    for br in branches:
+        bid = str(br.get("id") or "")
+        for pid in br.get("paper_ids") or []:
+            pid_to_branch[str(pid)] = bid
     enrich_branches_why_included(branches, papers, qp)
-    start_here = _start_here_entries(papers, recs, qp, pid_to_branch, branches)
-    start_ids = [str(e["paper_id"]) for e in start_here if isinstance(e, dict) and e.get("paper_id")]
-    reading_paths = build_reading_paths(payload, start_ids, pid_to_branch)
+    foundational_papers = build_foundational_paper_entries(papers, qp)
     retrieval_health = build_retrieval_health(payload, branches=branches)
     insights = build_insights(payload, branches, pid_to_branch)
 
     return {
         "version": _LITE_UX_VERSION,
-        "start_here": start_here,
+        "foundational_papers": foundational_papers,
         "branches": branches,
-        "reading_paths": reading_paths,
         "retrieval_health": retrieval_health,
         "insights": insights,
     }
 
 
 def start_here_tags_for_paper(p: dict[str, Any], query_profile: dict[str, Any] | None = None) -> list[str]:
-    """Public wrapper — same tag rules as ``start_here`` entries in ``build_lite_ux_payload``."""
-    return _start_here_tags(p, query_profile)
+    """Public wrapper for paper detail card tags."""
+    return _paper_role_tags(p, query_profile)
 
 
 __all__ = ["build_lite_ux_payload", "start_here_tags_for_paper"]

@@ -14,6 +14,7 @@ venv/
 # Generated reports / exports
 srg_research_report*.md
 *.bib
+evaluation_outputs/
 
 # Streamlit / project runtime folders
 srg_projects/

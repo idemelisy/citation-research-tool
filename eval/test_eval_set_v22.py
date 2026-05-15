@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from srg.intent_classifier import classify_query
+from srg.query_intent_normalization import normalize_query_intent
 
 
 def _eval_set_path() -> Path:
@@ -25,3 +26,9 @@ def test_eval_set_v1_schema_and_coverage() -> None:
         assert q.get("gold_intent")
     out = classify_query(queries[0]["text"], {})
     assert "distribution" in out and "intent_distribution" in out
+
+    ambiguity_cases = {q["id"]: q for q in queries if q.get("intent_registry_id")}
+    assert ambiguity_cases["a01"]["intent_registry_id"] == "direct_preference_optimization"
+    assert normalize_query_intent("direct preference optimization").intent_entry_id == "direct_preference_optimization"
+    assert normalize_query_intent("transformer").intent_entry_id == "transformer_nlp"
+    assert normalize_query_intent("visual debugging").intent_entry_id == "visual_debugging"

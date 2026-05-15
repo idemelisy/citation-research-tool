@@ -3,3 +3,5 @@
 
 how to run:
 C:\Users\ideme\miniconda3\envs\gymenv\python.exe -m srg.app --mode ui
+
+C:\Users\ideme\miniconda3\envs\gymenv\python.exe -m srg.app --mode ui-lite

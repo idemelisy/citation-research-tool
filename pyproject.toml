@@ -25,6 +25,9 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[project.scripts]
+srg-eval = "srg.core.evaluator:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests", "eval"]
 pythonpath = ["src"]

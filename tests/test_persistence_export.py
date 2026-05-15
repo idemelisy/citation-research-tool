@@ -89,7 +89,8 @@ def test_markdown_includes_potential_connections_for_dashed_edges() -> None:
     }
     md = build_markdown_report(payload)
     assert "Potential connections" in md
-    assert "Foundational" in md or "Highly ranked" in md
+    assert "Foundational papers" in md or "Literature branches" in md or "Missing link" in md
+    assert "### Start here" not in md
 
 
 def test_bibtex_contains_entries() -> None:

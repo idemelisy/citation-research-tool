@@ -26,7 +26,18 @@ from .intent_classifier import QueryIntent, classify_query
 from .evaluation import QualityReport, build_quality_report
 from .feedback import FeedbackStore
 from .graph import CitationGraphBuilder, GraphSnapshot, SemanticMetrics
+from .intent_coherence import (
+    apply_coherence_ranking_adjustment,
+    compute_intent_coherence,
+    conservative_discovery_adjustments,
+    passes_coherence_gate,
+)
+from .topical_ranking import apply_topical_ranking_layer
 from .intent_verification import apply_intent_verification_layer
+from .query_intent_normalization import (
+    expanded_query_variants_from_intent,
+    normalize_query_intent as normalize_query_intent_profile,
+)
 from .lite_ux import build_lite_ux_payload
 from .ingestion import (
     ArXivClient,
@@ -239,6 +250,68 @@ class SRGApplicationService:
                 score *= 0.32
         return max(0.0, min(1.0, score))
 
+    @staticmethod
+    def _apply_intent_coherence_layer(
+        nodes: list[dict[str, Any]],
+        *,
+        query_profile: dict[str, Any],
+        query_text: str,
+        query_domains: frozenset[str],
+        opts: dict[str, Any],
+    ) -> int:
+        """
+        Attach intent-coherence scores and adjust ``relevance_raw``.
+        Returns count of nodes marked ``coherence_suppressed``.
+        """
+        intent_entry_id = query_profile.get("intent_entry_id")
+        enrichment = list(query_profile.get("intent_enrichment_terms") or [])
+        ambiguity = float(query_profile.get("query_ambiguity_score") or 0.0)
+        bridge_dr = float(opts.get("bridge_downrank_factor", 0.45) or 0.45)
+        coherence_filter = bool(opts.get("coherence_filter_enabled", False))
+        suppressed_n = 0
+        for node in nodes:
+            if node.get("graph_noise"):
+                continue
+            sem = float(node.get("semantic_score", node.get("semantic_fit_score", 0.0)) or 0.0)
+            bundle = compute_intent_coherence(
+                node,
+                query_text=query_text,
+                enrichment_terms=enrichment,
+                intent_entry_id=str(intent_entry_id) if intent_entry_id else None,
+                query_domains=query_domains,
+                semantic_score=sem,
+                anchor_hops=node.get("anchor_graph_hops"),
+            )
+            node.update(bundle)
+            raw = float(node.get("relevance_raw", 0.0) or 0.0)
+            adj = apply_coherence_ranking_adjustment(raw, bundle, bridge_downrank_factor=bridge_dr)
+            node["relevance_raw"] = adj
+            node["final_score"] = round(adj, 6)
+            is_seed = node.get("seed_origin") in ("uploaded_pdf", "api_search")
+            if not passes_coherence_gate(
+                float(bundle["intent_coherence_score"]),
+                ambiguity_score=ambiguity,
+                is_seed=is_seed,
+            ):
+                node["coherence_suppressed"] = True
+                suppressed_n += 1
+                if (
+                    coherence_filter
+                    and node.get("seed_origin") == "discovered"
+                    and float(bundle.get("intent_subfield_penalty", 0.0) or 0.0) >= 0.34
+                ):
+                    node["graph_noise"] = True
+                    reasons = list(node.get("inclusion_reasons") or [])
+                    if "coherence_filtered" not in reasons:
+                        reasons.append("coherence_filtered")
+                    node["inclusion_reasons"] = reasons
+        apply_topical_ranking_layer(
+            nodes,
+            query_profile,
+            graph_blend=float(opts.get("topical_graph_blend", 0.28) or 0.28),
+        )
+        return suppressed_n
+
     def __init__(self, cache_db: str = "srg_cache.db", feedback_db: str = "srg_feedback.db") -> None:
         self.feedback_store = FeedbackStore(db_path=feedback_db)
         self.orchestrator = IngestionOrchestrator(
@@ -258,6 +331,7 @@ class SRGApplicationService:
         }
         self._cached_pii_concept_tail: str | None = None
         self._last_seed_selection_notes: list[str] = []
+        self._last_normalized_intent: Any = None
 
     def fetch_metadata_for_seed(self, provider: str, seed_id: str) -> dict[str, Any] | None:
         """Return API title + authors for a DOI / arXiv / OpenAlex id (PDF verification path; never uses PDF text)."""
@@ -340,37 +414,19 @@ class SRGApplicationService:
         return out
 
     @staticmethod
-    def _expanded_query_variants(q: str) -> list[str]:
+    def _expanded_query_variants(q: str, *, normalized_intent: Any = None) -> list[str]:
         base = (q or "").strip()
         if not base:
             return []
+        if normalized_intent is not None:
+            variants = expanded_query_variants_from_intent(normalized_intent)
+            if variants:
+                return variants
         low = base.lower()
         variants = [base]
         if "pii" in low or "identifiable" in low or "privacy" in low:
             variants.append(f'{base} OR "Personally Identifiable Information"')
             variants.append(f'{base} OR "data privacy"')
-        elif any(
-            k in low
-            for k in (
-                "dpo",
-                "direct preference",
-                "preference optimization",
-                "rlhf",
-                "human feedback",
-                "preference learning",
-                "alignment",
-                "reward model",
-                "orpo",
-                "constitutional ai",
-            )
-        ):
-            variants.extend(
-                [
-                    "direct preference optimization language model",
-                    "reinforcement learning from human feedback language model",
-                    "preference optimization large language model",
-                ]
-            )
         elif len(base.split()) <= 2:
             variants.append(f"{base} OR survey")
         return list(dict.fromkeys(v for v in variants if v))
@@ -566,7 +622,27 @@ class SRGApplicationService:
             if si:
                 intent = si
                 break
-        return {"query_text": q, "query_terms": terms[:12], "query_intent": intent}
+        profile: dict[str, Any] = {"query_text": q, "query_terms": terms[:16], "query_intent": intent}
+        for s in seeds:
+            for key in (
+                "query_text_normalized",
+                "intent_enrichment_terms",
+                "intent_entry_id",
+                "intent_label_normalized",
+                "query_ambiguity_score",
+                "intent_canonical_domains",
+                "intent_search_variants",
+                "intent_canonical_arxiv_ids",
+            ):
+                if key in s and s[key] is not None:
+                    profile[key] = s[key]
+            if profile.get("intent_entry_id"):
+                break
+        if profile.get("intent_enrichment_terms"):
+            extra = [str(t).lower() for t in profile["intent_enrichment_terms"] if str(t).strip()]
+            merged = list(dict.fromkeys(list(profile.get("query_terms") or []) + extra))
+            profile["query_terms"] = merged[:20]
+        return profile
 
     @staticmethod
     def _openalex_cited_by_count(merged_by_id: dict[str, PaperRecord], paper_id: str) -> int:
@@ -1010,10 +1086,15 @@ class SRGApplicationService:
         self._last_seed_selection_notes = []
         if not q:
             return []
-        ql = q.lower()
-        if "directed preference optimization" in ql:
-            q = ql.replace("directed preference optimization", "direct preference optimization", 1)
-        q_terms = self._tokenize_query_terms(q)
+        nqi = normalize_query_intent_profile(q)
+        self._last_normalized_intent = nqi
+        q = nqi.normalized_query or q
+        q_terms = list(
+            dict.fromkeys(
+                self._tokenize_query_terms(q)
+                + [t.lower() for t in nqi.enrichment_terms if str(t).strip()]
+            )
+        )
         q_intent = self._query_intent_from_text(q)
 
         def enrich_seed(seed: dict[str, Any]) -> dict[str, Any]:
@@ -1022,6 +1103,7 @@ class SRGApplicationService:
                 "query_text": q,
                 "query_terms": list(q_terms),
                 "query_intent": q_intent,
+                **nqi.to_profile_dict(),
             }
 
         if re.search(r"\b10\.\d{4,9}/", q, flags=re.IGNORECASE):
@@ -1035,7 +1117,7 @@ class SRGApplicationService:
             try:
                 seeds: list[dict[str, Any]] = []
                 seeds.extend(self._canonical_anchor_seeds_for_query(q))
-                for qq in self._expanded_query_variants(q):
+                for qq in self._expanded_query_variants(q, normalized_intent=nqi):
                     sq = arxiv_search_query_from_user_text(qq)
                     hits = ArXivClient().search(sq, max_results=max(1, min(arxiv_search_max_results, 50)))
                     seeds.extend({"provider": "arxiv", "id": h["id"], "origin": "api_search"} for h in hits if h.get("id"))
@@ -1058,7 +1140,7 @@ class SRGApplicationService:
             oa_seeds: list[dict[str, Any]] = []
             oa = OpenAlexClient()
             oa_cap = 20
-            for qq in self._expanded_query_variants(q):
+            for qq in self._expanded_query_variants(q, normalized_intent=nqi):
                 if len(oa_seeds) >= oa_cap:
                     break
                 result = oa.search_by_title(qq, per_page=5)
@@ -1096,6 +1178,22 @@ class SRGApplicationService:
                             self._last_seed_selection_notes.append(
                                 "OpenAlex: using search rank-1 (no canonical anchor list for this query)."
                             )
+            registry_arxiv = [
+                {"provider": "arxiv", "id": aid, "origin": "api_search"}
+                for aid in nqi.canonical_arxiv_ids
+                if aid
+            ]
+            seen_ca = {f"{s.get('provider')}:{s.get('id')}" for s in canonical_seeds}
+            for rs in registry_arxiv:
+                k = f"{rs['provider']}:{rs['id']}"
+                if k not in seen_ca:
+                    canonical_seeds.append(rs)
+                    seen_ca.add(k)
+            if nqi.intent_entry_id:
+                self._last_seed_selection_notes.append(
+                    f"Intent normalization: matched registry entry '{nqi.intent_entry_id}' "
+                    f"(ambiguity={nqi.ambiguity_score:.2f}); enrichment terms={len(nqi.enrichment_terms)}."
+                )
             seeds = list(canonical_seeds) + oa_seeds
             if self._is_pii_concept_query(q):
                 seeds.extend(self._openalex_pii_concept_seed_hits(diagnostics))
@@ -1175,8 +1273,19 @@ class SRGApplicationService:
         if not any(s.get("origin") == "uploaded_pdf" for s in seeds):
             # Avoid leaking PDF expand counters into Search-First-only runs.
             self._last_expand_stats = {}
-        effective_seeds = [
-            {
+        _intent_seed_keys = (
+            "query_text_normalized",
+            "intent_enrichment_terms",
+            "intent_entry_id",
+            "intent_label_normalized",
+            "query_ambiguity_score",
+            "intent_canonical_domains",
+            "intent_search_variants",
+            "intent_canonical_arxiv_ids",
+        )
+        effective_seeds = []
+        for s in seeds:
+            row: dict[str, Any] = {
                 "provider": s.get("provider", "").strip(),
                 "id": s.get("id", "").strip(),
                 "origin": s.get("origin", "discovered"),
@@ -1186,10 +1295,19 @@ class SRGApplicationService:
                 "query_terms": s.get("query_terms"),
                 "query_intent": s.get("query_intent"),
             }
-            for s in seeds
-        ]
+            for k in _intent_seed_keys:
+                if k in s:
+                    row[k] = s[k]
+            effective_seeds.append(row)
         query_profile = self._derive_query_profile(effective_seeds)
         opts = dict(discovery_options or {})
+        query_ambiguity = float(query_profile.get("query_ambiguity_score") or 0.0)
+        conservative = conservative_discovery_adjustments(query_ambiguity)
+        if conservative:
+            opts = {**opts, **conservative}
+            diagnostics_pre: list[str] = []
+        else:
+            diagnostics_pre = []
         top_n = int(opts.get("top_n", EXPAND_DISPLAY_TOP_N) or EXPAND_DISPLAY_TOP_N)
         top_n = max(10, min(200, top_n))
         coupling_threshold = int(opts.get("coupling_threshold", 3) or 3)
@@ -1206,6 +1324,21 @@ class SRGApplicationService:
         }
         two_hop_budget = int(opts.get("two_hop_budget", 120) or 120)
         two_hop_budget = max(30, min(300, two_hop_budget))
+        if conservative.get("two_hop_budget_scale"):
+            scaled = int(two_hop_budget * float(conservative["two_hop_budget_scale"]))
+            two_hop_budget = max(30, min(300, scaled))
+            diagnostics_pre.append(
+                f"High query ambiguity ({query_ambiguity:.2f}): 2-hop budget reduced to {two_hop_budget}."
+            )
+        if conservative.get("concept_threshold_boost"):
+            concept_threshold = min(
+                1.0,
+                concept_threshold + float(conservative["concept_threshold_boost"]),
+            )
+        if conservative.get("semantic_rank_min_score_boost"):
+            opts["semantic_rank_min_score"] = float(opts.get("semantic_rank_min_score", 0.25) or 0.25) + float(
+                conservative["semantic_rank_min_score_boost"]
+            )
         lite_field_aware = bool(opts.get("lite_field_aware", False))
         lite_retrieval_repair = bool(opts.get("lite_retrieval_repair", False))
         lite_coherence_stabilization = bool(opts.get("lite_coherence_stabilization", False))
@@ -1222,7 +1355,7 @@ class SRGApplicationService:
         if lite_retrieval_repair:
             floor = int(opts.get("two_hop_budget_floor", 200) or 200)
             two_hop_budget = max(two_hop_budget, max(30, min(300, floor)))
-        diagnostics: list[str] = []
+        diagnostics: list[str] = list(diagnostics_pre)
         diagnostics.extend(list(getattr(self, "_last_seed_selection_notes", []) or []))
         skipped_ids: list[str] = []
         if len(effective_seeds) < 12:
@@ -1709,6 +1842,19 @@ class SRGApplicationService:
                 raw *= 0.72
             node["relevance_raw"] = raw
             raw_scores.append(raw)
+        if lite_v2_ranking and (qtext_for_v2 or "").strip():
+            sup_n = self._apply_intent_coherence_layer(
+                graph_json["nodes"],
+                query_profile=query_profile,
+                query_text=qtext_for_v2,
+                query_domains=query_domains_v2,
+                opts=opts,
+            )
+            if sup_n > 0:
+                diagnostics.append(
+                    f"Intent coherence: {sup_n} node(s) below coherence gate (ambiguity={query_ambiguity:.2f})."
+                )
+            raw_scores = [float(n["relevance_raw"]) for n in graph_json["nodes"]]
         if lite_v2_ranking and lite_intent_verification and (qtext_for_v2 or "").strip():
             intent_verification_meta = apply_intent_verification_layer(
                 graph_json["nodes"],
@@ -1750,9 +1896,9 @@ class SRGApplicationService:
                 promoted = sorted(
                     graph_json["nodes"],
                     key=lambda n: (
-                        float(n.get("relation_expand_score", 0.0)),
+                        float(n.get("foundational_topical_score", n.get("topical_importance", 0.0)) or 0.0),
+                        float(n.get("query_centrality", 0.0) or 0.0),
                         -float(n.get("anchor_graph_hops", 99)),
-                        float(n.get("relevance_diverse_norm", n.get("relevance_norm", 0.0))),
                     ),
                     reverse=True,
                 )
@@ -1760,7 +1906,11 @@ class SRGApplicationService:
                 for n in promoted:
                     if int(n.get("anchor_graph_hops", 99)) > 6:
                         continue
-                    if float(n.get("relation_expand_score", 0.0)) < 0.04 and float(n.get("query_match_score", 0.0)) < 0.38:
+                    if float(n.get("topical_importance", 0.0) or 0.0) < 0.32 and float(
+                        n.get("query_match_score", 0.0)
+                    ) < 0.42:
+                        continue
+                    if n.get("is_generic_survey") and float(n.get("flagship_match_strength", 0) or 0) < 0.5:
                         continue
                     n["is_foundational_hub"] = True
                     n["inclusion_reasons"] = list(dict.fromkeys((n.get("inclusion_reasons") or []) + ["promoted_anchor"]))
@@ -1922,7 +2072,22 @@ class SRGApplicationService:
             },
             "quality_report": _report_to_json(quality),
             "discovery": {
-                "recommendations": [asdict(r) for r in rec_list],
+                "recommendations": [
+                    asdict(r)
+                    for r in rec_list
+                    if not any(
+                        n.get("id") == r.paper_id
+                        and (
+                            n.get("coherence_suppressed")
+                            or n.get("is_exploratory_bridge")
+                            or (
+                                float(n.get("intent_subfield_penalty", 0.0) or 0.0) >= 0.34
+                                and float(n.get("intent_coherence_score", 1.0) or 1.0) < 0.38
+                            )
+                        )
+                        for n in graph_json["nodes"]
+                    )
+                ],
                 "trends": self.discovery.trend_and_gap(graph),
             },
             "feedback_count": len(feedback),

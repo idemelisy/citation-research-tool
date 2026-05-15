@@ -167,6 +167,16 @@ def paper_reading_order_score(
     rel = float(paper.get("relevance_diverse_norm", paper.get("relevance_norm", 0.0)) or 0.0)
     cc = float(paper.get("citation_count", 0) or 0.0)
     missing = float(paper.get("missing_link_score", 0) or 0.0)
+    topical = float(paper.get("topical_importance", 0.0) or 0.0)
+    coh = float(paper.get("intent_coherence_score", 1.0) or 1.0)
+    if topical > 0:
+        rel = rel * 0.5 + topical * 0.5
+    rel *= 0.55 + 0.45 * coh
+    if paper.get("is_exploratory_bridge"):
+        rel *= 0.38
+    pen = float(paper.get("intent_subfield_penalty", 0.0) or 0.0)
+    if pen >= 0.34:
+        rel *= 0.42
     if intent_mode_v2 == QueryIntent.HARDWARE_SYSTEM:
         y = paper.get("year")
         rec = _reading_recency_alignment(int(y) if isinstance(y, int) else None)
@@ -403,68 +413,26 @@ def build_markdown_report(
     papers_with_refs = [p for p in papers if isinstance(p.get("references"), list) and len(p.get("references")) > 0]
 
     lite_ux = payload.get("lite_ux") if isinstance(payload.get("lite_ux"), dict) else {}
-    start_entries = lite_ux.get("start_here") or []
+    foundational_entries = lite_ux.get("foundational_papers") or []
     branches_lite = lite_ux.get("branches") or []
 
     lines.append("## Reading guide\n" if not clean else "## Reading list\n")
-    if start_entries:
-        lines.append("### Start here\n")
-        for it in start_entries:
+    if foundational_entries:
+        lines.append("## Foundational papers\n")
+        for it in foundational_entries:
             if not isinstance(it, dict):
                 continue
-            pid = str(it.get("paper_id") or "").strip()
-            ttl = (it.get("title") or pid).strip()
+            ttl = (it.get("title") or it.get("paper_id") or "").strip()
             yr = it.get("year")
             yr_s = f" ({yr})" if yr is not None else ""
-            tags = it.get("tags") or []
-            tg = ", ".join(str(t) for t in tags if t) if isinstance(tags, list) else ""
             ol = (it.get("one_line") or "").strip()
-            tags_suffix = f" · _{tg}_" if tg else ""
-            lines.append(f"- **{ttl}**{yr_s}{tags_suffix}")
+            lines.append(f"- **{ttl}**{yr_s}")
             if ol:
                 lines.append(f"  - {ol}")
         lines.append("")
 
-    sh_ids = {str(e.get("paper_id") or "").strip() for e in start_entries if isinstance(e, dict)}
-    ranked_for_list = [p for p in ranked_papers if str(p.get("id") or "") not in sh_ids][:10] if sh_ids else ranked_papers[:10]
-
-    if ranked_for_list:
-        if not clean:
-            hw_note = (
-                " Hardware-mode queries down-weight raw graph degree, add recency + GPU/pipeline title cues, "
-                "and (when the query mentions tessellation) demote off-topic GPU graphics papers."
-                if iv2_sort == QueryIntent.HARDWARE_SYSTEM
-                else ""
-            )
-            lines.append(
-                "_Importance rank uses graph relevance, connectivity, and missing-link evidence."
-                + hw_note
-                + " Use this as a practical reading order, not a ground-truth citation count._\n"
-            )
-        qt_for_why = (qp.get("query_text") or "").strip()
-        intent_for_why = str(qp.get("intent_mode_v2") or qp.get("query_intent") or "exploratory")
-        if sh_ids:
-            lines.append("### More papers by importance\n" if clean else "### Extended ranked pool\n")
-        for idx, p in enumerate(ranked_for_list, start=1):
-            if clean:
-                lines.append(f"### {idx}. {p.get('title', '')}")
-                w = why_it_matters_one_line(
-                    p, query_text=qt_for_why, intent_label=intent_for_why
-                )
-                lines.append(f"Why: {w}")
-                lines.append("")
-            else:
-                imp = paper_reading_order_score(p, intent_mode_v2=iv2_sort, query_text=qt_sort)
-                lines.append(
-                    f"- #{idx} **{p.get('title', '')}** (`{p.get('id')}`) — "
-                    f"importance={imp:.3f}, relevance={float(p.get('relevance_norm', 0.0) or 0.0):.3f}, "
-                    f"graph_links={int(p.get('citation_count', 0) or 0)}"
-                )
-    else:
-        if not ranked_papers and not start_entries:
-            lines.append("_No papers in graph._")
-        elif sh_ids and ranked_papers:
-            lines.append("_Further importance-ranked papers are omitted here to avoid duplicating Start here._\n")
+    if not foundational_entries and not ranked_papers:
+        lines.append("_No papers in graph._\n")
     lines.append("")
 
     if branches_lite:
@@ -480,6 +448,9 @@ def build_markdown_report(
             whyb = (br.get("why_included") or "").strip()
             if whyb:
                 lines.append(f"- _Why this branch appears_: {whyb}\n")
+            purity = br.get("branch_purity")
+            if isinstance(purity, (int, float)) and float(purity) < 0.45:
+                lines.append("- _This branch has mixed topical focus — interpret with caution._\n")
             for pid in (br.get("paper_ids") or [])[:8]:
                 p = by_id.get(str(pid))
                 if not p:
@@ -515,25 +486,6 @@ def build_markdown_report(
                 lines.append("")
         else:
             lines.append("_No topic groups found._\n")
-
-    reading_paths_md = lite_ux.get("reading_paths") if isinstance(lite_ux.get("reading_paths"), list) else []
-    if reading_paths_md:
-        lines.append("## Suggested reading paths\n")
-        for rp in reading_paths_md[:3]:
-            if not isinstance(rp, dict):
-                continue
-            lines.append(f"### {rp.get('label', 'Path')}\n")
-            if rp.get("rationale"):
-                lines.append(f"_{rp.get('rationale')}_\n")
-            for j, pid in enumerate(rp.get("paper_ids") or [], start=1):
-                p = by_id.get(str(pid))
-                if not p:
-                    continue
-                if clean:
-                    lines.append(f"{j}. **{p.get('title', '')}**")
-                else:
-                    lines.append(f"{j}. **{p.get('title', '')}** (`{pid}`)")
-            lines.append("")
 
     rh_md = lite_ux.get("retrieval_health") if isinstance(lite_ux.get("retrieval_health"), dict) else {}
     sigs = rh_md.get("signals") if isinstance(rh_md.get("signals"), list) else []
@@ -595,63 +547,7 @@ def build_markdown_report(
                 lines.append(f"  - `{p.get('id')}`: {len(refs)} references")
     lines.append("")
 
-    lines.append("## Foundational papers\n")
-    uploaded = [p for p in papers_all if p.get("seed_origin") == "uploaded_pdf"]
-    if uploaded:
-        lines.append("### Library seeds (uploaded PDFs)\n")
-        for p in uploaded[:30]:
-            lbl = p.get("source_label", "PDF")
-            if clean:
-                lines.append(f"- **{p.get('title', '')}** — _{lbl}_")
-            else:
-                lines.append(f"- **{p.get('title', '')}** (`{p.get('id')}`) — _{lbl}_")
-        lines.append("")
-    lines.append("### Highly ranked in this graph\n")
-    gold = [
-        p
-        for p in papers_all
-        if p.get("is_foundational_hub")
-        and p.get("foundational_eligible", True)
-        and not p.get("graph_noise")
-    ]
-    gold_sorted = sorted(
-        gold,
-        key=lambda p: (float(p.get("pii_concept_match", 0.0)), int(p.get("citation_count", 0))),
-        reverse=True,
-    )
-    if gold_sorted:
-        lines.append("_Bright gold (foundational) hubs — pinned at graph center in the UI._\n")
-        for p in gold_sorted[:12]:
-            if clean:
-                lines.append(f"- ★ **{p.get('title', '')}** — _Foundational anchor in this map._")
-            else:
-                cc = p.get("citation_count", "—")
-                pm = p.get("pii_concept_match", "—")
-                lines.append(
-                    f"- ★ **{p.get('title', '')}** — PII concept match ≈{pm}, graph degree {cc} (`{p.get('id')}`)"
-                )
-        lines.append("")
-    recs_emitted = 0
-    for r in recs:
-        if recs_emitted >= 15:
-            break
-        pid = r.get("paper_id")
-        meta = by_id.get(pid or "", {})
-        title = meta.get("title") or pid
-        if str(title).strip().startswith("Pending metadata"):
-            continue
-        if clean:
-            lines.append(f"- **{title}** — _{r.get('reason', '')}_")
-        else:
-            lines.append(
-                f"- **{title}** — score {r.get('score', '')}: _{r.get('reason', '')}_ "
-                f"(`{pid}`)"
-            )
-        recs_emitted += 1
-    if not recs_emitted and not uploaded and not gold_sorted:
-        lines.append("_No ranking data._\n")
-
-    lines.append("\n## Missing link candidates (foundational PII literature)\n")
+    lines.append("\n## Missing link candidates\n")
     if missing:
         lines.append(
             "_Sorted by PII concept match on OpenAlex, then global citation count, then how many of your "

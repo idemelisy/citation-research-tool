@@ -106,6 +106,16 @@ def check_transformer_pipeline(payload: dict[str, Any]) -> tuple[bool, str]:
     return True, f"Vaswani title resolved off merged node: {title[:80]}"
 
 
+def check_dpo_discover(seeds: list[dict[str, Any]], notes: list[str]) -> tuple[bool, str]:
+    aids = _arxiv_ids(seeds)
+    if "2305.18290" not in aids:
+        return False, f"DPO canonical arXiv 2305.18290 missing; have: {sorted(aids)[:12]}"
+    note_hit = any("direct_preference_optimization" in n or "Intent normalization" in n for n in notes)
+    if not note_hit:
+        return False, "Expected intent normalization note for DPO query."
+    return True, f"DPO anchor 2305.18290 present; intent notes OK ({len(notes)} note(s))."
+
+
 def check_rlhf_discover(seeds: list[dict[str, Any]]) -> tuple[bool, str]:
     aids = _arxiv_ids(seeds)
     # At least one well-known alignment paper from canonical list
@@ -143,6 +153,19 @@ def run_query(
         ok, msg = check_rlhf_discover(seeds)
         print(f"  [discover] RLHF: {'PASS' if ok else 'FAIL'} - {msg}", flush=True)
         ok_all = ok_all and ok
+    elif label == "dpo":
+        ok, msg = check_dpo_discover(seeds, notes)
+        print(f"  [discover] DPO: {'PASS' if ok else 'FAIL'} - {msg}", flush=True)
+        ok_all = ok_all and ok
+    elif label in ("transformer_amb", "visdebug"):
+        from srg.query_intent_normalization import normalize_query_intent
+
+        nqi = normalize_query_intent(query)
+        expected = "transformer_nlp" if label == "transformer_amb" else "visual_debugging"
+        ok = nqi.intent_entry_id == expected
+        msg = f"intent_entry_id={nqi.intent_entry_id!r} ambiguity={nqi.ambiguity_score:.2f}"
+        print(f"  [discover] {label}: {'PASS' if ok else 'FAIL'} - {msg}", flush=True)
+        ok_all = ok_all and ok
 
     if discover_only:
         return ok_all
@@ -174,7 +197,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--only",
-        choices=("gnn", "transformer", "rlhf"),
+        choices=("gnn", "transformer", "rlhf", "dpo", "transformer_amb", "visdebug"),
         default=None,
         help="Run a single benchmark instead of all three.",
     )
@@ -187,6 +210,9 @@ def main() -> int:
         ("gnn", "gnn", "graph neural networks"),
         ("transformer", "transformer", "transformer attention mechanism"),
         ("rlhf", "rlhf", "RLHF reward modeling"),
+        ("dpo", "dpo", "direct preference optimization"),
+        ("transformer_amb", "transformer_amb", "transformer"),
+        ("visdebug", "visdebug", "visual debugging"),
     ]
     if args.only:
         jobs = [j for j in jobs if j[0] == args.only]

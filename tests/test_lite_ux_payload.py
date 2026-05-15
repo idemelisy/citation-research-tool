@@ -1,4 +1,4 @@
-"""Tests for pipeline ``lite_ux`` bundle (start_here, branches)."""
+"""Tests for pipeline ``lite_ux`` bundle (foundational, branches)."""
 
 from __future__ import annotations
 
@@ -36,28 +36,26 @@ def test_build_lite_ux_payload_structure():
     payload = {"papers": papers, "query_profile": qp, "discovery": {"recommendations": recs}}
     ux = build_lite_ux_payload(payload)
     assert int(ux.get("version") or 0) >= 2
-    assert isinstance(ux.get("start_here"), list)
+    assert "start_here" not in ux
+    assert isinstance(ux.get("foundational_papers"), list)
     assert isinstance(ux.get("branches"), list)
     rh = ux.get("retrieval_health")
     assert isinstance(rh, dict) and "signals" in rh
-    assert isinstance(ux.get("reading_paths"), list)
+    assert "reading_paths" not in ux
     assert isinstance(ux.get("insights"), list)
-    for e in ux["start_here"]:
-        assert "paper_id" in e and "title" in e and "one_line" in e and "tags" in e
     for b in ux["branches"]:
         assert "label" in b and "paper_ids" in b and "summary" in b and "central_paper_id" in b
 
 
-def test_start_here_tags_foundational():
+def test_paper_role_tags_foundational():
     p = {"is_foundational_hub": True, "foundational_eligible": True, "year": 2020, "title": "A survey of RLHF"}
     tags = start_here_tags_for_paper(p)
     assert "Foundational" in tags
     assert "Survey" in tags
-    # Stable product order
     assert tags == ["Foundational", "Survey"]
 
 
-def test_start_here_tags_canonical_and_cross_domain():
+def test_paper_role_tags_canonical_and_cross_domain():
     p = {
         "title": "Some method paper",
         "year": 2019,
@@ -80,7 +78,7 @@ def test_branch_label_strips_query_terms():
     assert "dpo" not in lab.lower()
 
 
-def test_reading_paths_and_branch_why_included():
+def test_branch_why_included_and_purity_field():
     papers = [
         _paper("a", "Old Paper Alpha", year=2018, relevance_norm=0.92, relation_expand_score=0.2),
         _paper("b", "New Paper Beta", year=2024, relevance_norm=0.88, relation_expand_score=0.2),
@@ -98,23 +96,41 @@ def test_reading_paths_and_branch_why_included():
     }
     ux = build_lite_ux_payload(payload)
     assert any((b.get("why_included") or "").strip() for b in ux["branches"])
-    assert isinstance(ux.get("reading_paths"), list) and len(ux["reading_paths"]) >= 1
+    assert "reading_paths" not in ux
+    assert "start_here" not in ux
 
 
-def test_near_duplicate_filters_start_here():
+def test_near_duplicate_filters_foundational():
     papers = [
-        _paper("p1", "Learning from Human Preferences via Reward Models", relevance_norm=0.99),
+        _paper(
+            "p1",
+            "Learning from Human Preferences via Reward Models",
+            relevance_norm=0.99,
+            semantic_score=0.72,
+            intent_coherence_score=0.68,
+            topical_importance=0.7,
+        ),
         _paper(
             "p2",
             "Learning from Human Preferences via Reward Models: Extended Analysis",
             relevance_norm=0.98,
+            semantic_score=0.7,
+            intent_coherence_score=0.65,
+            topical_importance=0.65,
         ),
         _paper("p3", "Completely Different Topic in Robotics Control", relevance_norm=0.5),
     ]
-    qp = {"query_text": "RLHF", "query_terms": ["rlhf"], "intent_mode_v2": "method"}
+    qp = {
+        "query_text": "RLHF reward modeling",
+        "query_terms": ["rlhf", "reward"],
+        "intent_mode_v2": "method",
+        "intent_entry_id": "rlhf_alignment",
+        "intent_enrichment_terms": ["rlhf", "human feedback"],
+    }
     recs = [{"paper_id": "p1", "score": 1.0, "reason": "r"}, {"paper_id": "p2", "score": 0.9, "reason": "r"}]
     payload = {"papers": papers, "query_profile": qp, "discovery": {"recommendations": recs}}
     ux = build_lite_ux_payload(payload)
-    ids = [e["paper_id"] for e in ux["start_here"]]
-    assert "p1" in ids
-    assert "p2" not in ids or ids.count("p2") == 0
+    assert "start_here" not in ux
+    found_ids = [e["paper_id"] for e in ux.get("foundational_papers") or []]
+    assert "p1" in found_ids
+    assert "p2" not in found_ids
