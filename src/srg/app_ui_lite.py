@@ -38,6 +38,8 @@ else:
     from .synthesis_export import build_bibtex, build_markdown_report
 
 DEV_MODE = False
+PRODUCT_NAME = "Semantic Research Engine"
+EXPORT_BASENAME = "semantic_research_engine"
 LITE_MAX_GRAPH_NODES = 28
 LITE_MAX_GRAPH_EDGES = 36
 LITE_GRAPH_HEIGHT = 720
@@ -587,7 +589,7 @@ def _render_dev_diagnostics(payload: dict[str, Any], pmap: dict[str, dict[str, A
 
 
 def run_srg_lite_ui() -> None:
-    st.set_page_config(page_title="SRG Lite", layout="wide", initial_sidebar_state="collapsed")
+    st.set_page_config(page_title=PRODUCT_NAME, layout="wide", initial_sidebar_state="collapsed")
     st.markdown(LITE_CSS, unsafe_allow_html=True)
 
     if "service" not in st.session_state:
@@ -601,34 +603,36 @@ def run_srg_lite_ui() -> None:
 
     service: SRGApplicationService = st.session_state.service
 
-    st.markdown("# SRG Lite")
+    st.markdown(f"# {PRODUCT_NAME}")
     st.markdown('<p class="lite-tagline">Discover the papers that matter — and how they connect.</p>', unsafe_allow_html=True)
 
     explore_pending = (st.session_state.lite_explore_pending or "").strip()
     exploring = bool(explore_pending)
 
-    q_col, btn_col = st.columns([5, 1], vertical_alignment="center")
-    with q_col:
-        q = st.text_input(
-            "Topic, paper title, DOI, or arXiv id",
-            label_visibility="collapsed",
-            placeholder="e.g. direct preference optimization · or paste a DOI / arXiv id",
-            key="lite_query",
-        )
-    with btn_col:
-        discover = st.button(
-            "Running…" if exploring else "Explore",
-            type="primary",
-            use_container_width=True,
-            key="lite_discover",
-            disabled=exploring,
-        )
+    with st.form("lite_search_form", border=False):
+        q_col, btn_col = st.columns([5, 1], vertical_alignment="bottom")
+        with q_col:
+            q = st.text_input(
+                "Topic, paper title, DOI, or arXiv id",
+                label_visibility="collapsed",
+                placeholder="e.g. direct preference optimization · press Enter or click Explore",
+                value=st.session_state.get("lite_query_text", ""),
+                disabled=exploring,
+            )
+        with btn_col:
+            discover = st.form_submit_button(
+                "Running…" if exploring else "Explore",
+                type="primary",
+                use_container_width=True,
+                disabled=exploring,
+            )
 
     if discover and not exploring:
         qq = (q or "").strip()
         if len(qq) < 3 and not re.search(r"\b10\.\d{4,9}/", qq, flags=re.IGNORECASE):
             st.info("Use at least three characters, or paste a DOI (10.xxxx/…).")
         else:
+            st.session_state.lite_query_text = qq
             st.session_state.lite_explore_pending = qq
             st.rerun()
 
@@ -724,10 +728,10 @@ def run_srg_lite_ui() -> None:
             "Export Markdown",
             data=build_markdown_report(
                 payload,
-                project_title="SRG Lite reading list",
+                project_title=f"{PRODUCT_NAME} reading list",
                 clean=bool(LITE_DISCOVERY_OPTIONS.get("export_clean_reading_mode", True)),
             ),
-            file_name="srg_lite_reading_list.md",
+            file_name=f"{EXPORT_BASENAME}_reading_list.md",
             mime="text/markdown",
             key="lite_dl_md",
             use_container_width=True,
@@ -735,7 +739,7 @@ def run_srg_lite_ui() -> None:
         st.download_button(
             "Export BibTeX",
             data=build_bibtex(payload),
-            file_name="srg_lite_library.bib",
+            file_name=f"{EXPORT_BASENAME}_library.bib",
             mime="text/plain",
             key="lite_dl_bib",
             use_container_width=True,
