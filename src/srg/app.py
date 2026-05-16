@@ -80,10 +80,12 @@ def run_streamlit(projects_dir: str | None = None) -> int:
     )
 
 
-def run_streamlit_lite(projects_dir: str | None = None) -> int:
+def run_streamlit_lite(projects_dir: str | None = None, *, fast: bool = False) -> int:
     env = os.environ.copy()
     if projects_dir:
         env["SRG_PROJECTS_DIR"] = projects_dir
+    if fast:
+        env["SRG_LITE_FAST"] = "1"
     return subprocess.call(
         [sys.executable, "-m", "streamlit", "run", "src/srg/app_ui_lite.py"],
         env=env,
@@ -104,12 +106,17 @@ def main() -> None:
         metavar="DIR",
         help="Directory for saved SRG project JSON files; passed to the UI as SRG_PROJECTS_DIR (default: ./srg_projects under cwd).",
     )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="SRG Lite: fast path only (skip background enrichment).",
+    )
     args = parser.parse_args()
 
     if args.mode == "ui":
         raise SystemExit(run_streamlit(args.projects_dir))
     if args.mode == "ui-lite":
-        raise SystemExit(run_streamlit_lite(args.projects_dir))
+        raise SystemExit(run_streamlit_lite(args.projects_dir, fast=args.fast))
     run_demo()
 
 
