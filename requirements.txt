@@ -1,0 +1,5 @@
+# Streamlit Cloud / pip installs (preferred over Poetry for deploy)
+requests>=2.32.0
+streamlit>=1.44.0
+streamlit-agraph>=0.0.45
+pypdf>=4.2.0

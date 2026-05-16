@@ -24,6 +24,7 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["srg*"]
 
 [project.scripts]
 srg-eval = "srg.core.evaluator:main"
