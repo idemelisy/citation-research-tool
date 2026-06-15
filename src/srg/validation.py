@@ -100,9 +100,15 @@ class ValidationAudit:
     conflict_log: list[str] = field(default_factory=list)
 
 
-def _title_similarity(left: str, right: str) -> float:
-    return difflib.SequenceMatcher(a=left.lower(), b=right.lower()).ratio()
 
+def _title_similarity(left, right):
+    if not left or not right:
+        return 0.0
+
+    return difflib.SequenceMatcher(
+        a=str(left).lower(),
+        b=str(right).lower()
+    ).ratio()
 
 def _norm_identifier(value: str | None) -> str | None:
     if not value:
